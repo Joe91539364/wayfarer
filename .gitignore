@@ -1,0 +1,40 @@
+# 依赖与构建产物
+node_modules/
+dist/
+*.tsbuildinfo
+server/app.mjs
+server/crawler.mjs
+server/dbg.mjs
+server/dbg3.mjs
+scripts/eval.mjs
+scripts/glm-smoke.mjs
+scripts/parse-test.mjs
+scripts/t-intake.mjs
+
+# 本地密钥：绝对不能提交
+server/.keys.json
+server/.cache/
+.env
+.env.*
+
+# 运行时数据（行程、照片、日志、进程号）
+logs/
+data/*
+!data/city-packs/
+!data/city-packs/*.json
+*.pid
+
+# 调试与抓取出来的临时快照
+a1.json
+pack.json
+shots/
+
+# 个人作业脚本（含姓名学号，不进公开仓库）
+docs/gen_homework.py
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.workbuddy/
