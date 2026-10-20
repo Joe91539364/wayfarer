@@ -5,6 +5,8 @@
 一个本地优先的行程规划 Agent：输入一句自然语言需求，输出**结构化、可编辑、可校验**的行程，
 并附带一份能展开看验算过程的**可行性证明**。
 
+![工作区全景](docs/shot-workspace.png)
+
 ## 快速开始
 
 ```bash
@@ -12,7 +14,7 @@ npm install
 npm run crawl    # 先抓一轮（产出 public/catalog.json + official.json）
 npm run serve    # http://127.0.0.1:8787  静态站 + 爬虫 API，页面里可一键抓
 npm run dev      # http://127.0.0.1:5273  纯前端开发（读同一份 catalog.json）
-npm test         # 49 个单测
+npm test         # 68 个单测
 npm run eval     # 生成 eval-report.md（20 条用例）
 npm run build    # 产物在 dist/，同时生成可双击的 dist/standalone.html
 ```
@@ -309,6 +311,8 @@ Key 只在 Node 侧用，不进页面、不进构建产物。前端只会拿到 
 装完是一个独立图标，点开全屏无地址栏，断网也能看已拉取的行程（壳与静态资源有缓存，
 `/api/*` 永远走网络不缓存，所以数据不会陈旧）。
 
+![装成手机 App](docs/shot-pwa.png)
+
 实现：`public/manifest.webmanifest`（standalone + 主题色米白）+ `public/sw.js`
 （导航 network-first / 哈希资源 cache-first / 其余 stale-while-revalidate）+
 `src/components/InstallBanner.tsx`（关闭一次就记住，不再打扰）。
@@ -373,6 +377,8 @@ Key 只在 Node 侧用，不进页面、不进构建产物。前端只会拿到 
 - 上传前先压缩到长边 1600、质量 0.82（手机原图能压到几百 KB，肉眼无差）；截图可以直接 Ctrl+V
 - 大图里可以标「当时在」哪个点位，标完时间轴上那一项会出现红心角标
 - 「回忆长页」一键生成一封按天分段的信，`Ctrl+P` 存成 PDF 就能发给同行的人
+
+![幸福时刻 · 记忆墙](docs/shot-moments.png)
 
 ## 同步到日历 / 分享
 
@@ -446,4 +452,4 @@ docs/            plan-v3.md（规划书 v3.0 源文件）
 
 `npm run eval` 会跑 20 条用例（完整 / 残缺 / 冲突 / 修改 / 对抗 五组），输出 `eval-report.md`。
 
-当前结果：通过率 100%，首次通过率 95%，POI 有效率 100%，49 个单测全绿。
+当前结果：通过率 100%，首次通过率 95%，POI 有效率 100%，68 个单测全绿。
