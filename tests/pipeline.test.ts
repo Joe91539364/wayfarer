@@ -66,6 +66,23 @@ describe('INTAKE', () => {
     // 没抓到就老实报缺失，不许瞎猜
     expect(intake('从去年开始想去成都玩3天').missing).toContain('origin');
   });
+
+  it('「去 X」的目的地优先于全文命中的内置城市（用户原话：从杭州去临汾）', () => {
+    // 旧版 findCity(全文) 命中内置的杭州就把目的地定成杭州，临汾整个被丢掉 → 「杭州 → 杭州」
+    const r = intake('五一想从杭州去临汾玩玩，四个人，预算10000，喜欢吃和自然');
+    expect(r.meta.destination).toBe('临汾');
+    expect(r.meta.city_code).toBe('dynamic:临汾');
+    expect(r.meta.origin_city).toBe('杭州');
+  });
+
+  it('「去」内置城市仍走内置包，POI 名不抢城市位', () => {
+    // 「去」的是内置城市 → 用内置包
+    const r = intake('从南京出发去苏州玩2天');
+    expect(r.meta.destination).toBe('苏州');
+    // 「去西湖边玩」抓到的是景点不是城市 → 保留内置命中的杭州
+    const r2 = intake('从杭州去西湖边玩3天');
+    expect(r2.meta.destination).toBe('杭州');
+  });
 });
 
 describe('OUTLINE + SCHEDULE', () => {

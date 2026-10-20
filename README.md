@@ -14,7 +14,7 @@ npm install
 npm run crawl    # 先抓一轮（产出 public/catalog.json + official.json）
 npm run serve    # http://127.0.0.1:8787  静态站 + 爬虫 API，页面里可一键抓
 npm run dev      # http://127.0.0.1:5273  纯前端开发（读同一份 catalog.json）
-npm test         # 68 个单测
+npm test         # 70 个单测
 npm run eval     # 生成 eval-report.md（20 条用例）
 npm run build    # 产物在 dist/，同时生成可双击的 dist/standalone.html
 ```
@@ -452,4 +452,4 @@ docs/            plan-v3.md（规划书 v3.0 源文件）
 
 `npm run eval` 会跑 20 条用例（完整 / 残缺 / 冲突 / 修改 / 对抗 五组），输出 `eval-report.md`。
 
-当前结果：通过率 100%，首次通过率 95%，POI 有效率 100%，68 个单测全绿。
+当前结果：通过率 100%，首次通过率 95%，POI 有效率 100%，70 个单测全绿。

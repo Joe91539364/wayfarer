@@ -102,6 +102,16 @@ export function parseDestinationName(text: string): string | null {
   return name.length >= 2 ? name : null;
 }
 
+/**
+ * 「去」字后面抓到的可能是景点不是城市：「从杭州去西湖边玩」抓到「西湖边」。
+ * 城市名几乎不会以这些字结尾，命中就不覆盖全文命中的内置城市。
+ */
+const POI_SUFFIX = /(?:边|山|湖|海|岛|寺|庙|塔|桥|洞|园|馆|街|巷|村|寨|湾|滩|泉|林|谷|峰|崖|坝|沟|古镇|古城|公园|广场|景区|一带)$/;
+
+function looksLikePoi(name: string): boolean {
+  return POI_SUFFIX.test(name);
+}
+
 function parseCount(text: string): number | null {
   const cn: Record<string, number> = { 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8 };
   let m = /(\d+)\s*(?:个)?人/.exec(text);
@@ -219,7 +229,6 @@ function parseStartDate(text: string): string | null {
 export function intake(text: string, base?: Partial<Meta>): IntakeResult {
   const notes: string[] = [];
   const missing: string[] = [];
-  let city = findCity(text);
   const days = parseDays(text);
   const budget = parseBudget(text);
   const travelers = parseCount(text);
@@ -227,8 +236,19 @@ export function intake(text: string, base?: Partial<Meta>): IntakeResult {
 
   const origin = parseOrigin(text);
 
+  // 「去 X」明确指出的目的地优先于全文命中的内置城市。
+  // 「从杭州去临汾玩」：findCity(全文) 会命中内置的杭州，但那是出发地——真正的目的地
+  // 临汾不在内置表里，按老逻辑会被整个丢掉，变成「杭州 → 杭州」。
+  let city = findCity(text);
+  const destFromText = parseDestinationName(text);
+  if (city && destFromText && destFromText !== city.name && !looksLikePoi(destFromText)) {
+    const destCity = findCity(destFromText);
+    // 「去」的城市在内置表 → 用它；不在 → 交服务端现建城市包（dynamic）
+    city = destCity;
+  }
+
   // 内置没有这个城市时，先记下名字；服务端会用它现建城市包
-  const destName = city ? city.name : parseDestinationName(text);
+  const destName = city ? city.name : destFromText;
   const start = explicitStart ?? addDays(new Date().toISOString().slice(0, 10), 14);
   if (!explicitStart) {
     notes.push('未指定出发日期，按两周后估算');
