@@ -1,0 +1,795 @@
+{
+  "title": "行迹智能体业务运行图",
+  "groups": [
+    {
+      "id": "intake",
+      "name": "需求理解",
+      "color": "#dabb82"
+    },
+    {
+      "id": "research",
+      "name": "事实检索",
+      "color": "#74bba7"
+    },
+    {
+      "id": "plan",
+      "name": "行程编排",
+      "color": "#81a8d8"
+    },
+    {
+      "id": "verify",
+      "name": "规则校验",
+      "color": "#c4a0d4"
+    },
+    {
+      "id": "repair",
+      "name": "修复与降级",
+      "color": "#e8a17e"
+    },
+    {
+      "id": "output",
+      "name": "输出与反馈",
+      "color": "#a3be89"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "S0",
+      "name": "接收旅行需求",
+      "group": "intake",
+      "kind": "start",
+      "description": "开始接收用户需求，建立本轮任务标识。",
+      "input": "原始旅行需求",
+      "output": "用户原始请求",
+      "source": "src/agent/orchestrator.ts",
+      "path": "行迹工作流/S0 接收旅行需求.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "接收旅行需求"
+    },
+    {
+      "id": "A1",
+      "name": "语义抽取",
+      "group": "intake",
+      "kind": "model",
+      "description": "抽取目的地、日期、天数、人数、预算、兴趣和必去项，不猜缺失条件。",
+      "input": "用户原始请求",
+      "output": "已抽取需求",
+      "source": "src/agent/intake.ts",
+      "path": "行迹工作流/A1 语义抽取.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "语义抽取"
+    },
+    {
+      "id": "A2",
+      "name": "字段与约束检查",
+      "group": "intake",
+      "kind": "process",
+      "description": "检查日期、人数、预算口径及歧义；与已确认条件合并。",
+      "input": "已抽取需求",
+      "output": "待补充字段、可进入规划",
+      "source": "src/agent/understand.ts",
+      "path": "行迹工作流/A2 字段与约束检查.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "字段与约束检查"
+    },
+    {
+      "id": "D1",
+      "name": "需求是否完整",
+      "group": "intake",
+      "kind": "decision",
+      "description": "关键信息已确认才进入检索，否则只追问。",
+      "input": "待补充字段",
+      "output": "是 → B1；否 → A3",
+      "source": "src/agent/intake.ts",
+      "path": "行迹工作流/D1 需求是否完整.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "需求是否完整"
+    },
+    {
+      "id": "A3",
+      "name": "多轮追问",
+      "group": "intake",
+      "kind": "user",
+      "description": "向用户追问缺失信息，保留已确认字段，补充后重新抽取。",
+      "input": "待补充字段",
+      "output": "用户补充 → A1",
+      "source": "src/components/RequirementsCard.tsx",
+      "path": "行迹工作流/A3 多轮追问.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "多轮追问"
+    },
+    {
+      "id": "B1",
+      "name": "多源资料检索",
+      "group": "research",
+      "kind": "data",
+      "description": "检索可用的本地数据与已配置来源；不把模型记忆当作实时核实。",
+      "input": "已抽取需求",
+      "output": "原始候选集合",
+      "source": "src/agent/research.ts",
+      "path": "行迹工作流/B1 多源资料检索.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "多源资料检索"
+    },
+    {
+      "id": "E1",
+      "name": "失败重试与缓存",
+      "group": "research",
+      "kind": "error",
+      "description": "来源失败时有限恢复，使用有效缓存；不无限循环。",
+      "input": "来源异常",
+      "output": "有效缓存、空候选集合",
+      "source": "server/net.ts",
+      "path": "行迹工作流/E1 失败重试与缓存.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "失败重试与缓存"
+    },
+    {
+      "id": "B2",
+      "name": "清洗与来源标记",
+      "group": "research",
+      "kind": "process",
+      "description": "合并同一景点，核对城市，记录来源、更新时间与缺失字段。",
+      "input": "原始候选集合",
+      "output": "可用候选集合",
+      "source": "server/merge.ts",
+      "path": "行迹工作流/B2 清洗与来源标记.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "清洗与来源标记"
+    },
+    {
+      "id": "D2",
+      "name": "候选是否可用",
+      "group": "research",
+      "kind": "decision",
+      "description": "存在可用候选才继续，无数据则说明原因并结束。",
+      "input": "可用候选集合",
+      "output": "是 → B3；否 → E2",
+      "source": "src/agent/research.ts",
+      "path": "行迹工作流/D2 候选是否可用.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "候选是否可用"
+    },
+    {
+      "id": "E2",
+      "name": "无数据说明",
+      "group": "research",
+      "kind": "error",
+      "description": "说明目的地或条件缺少可用数据，不生成虚构地点。",
+      "input": "空候选集合",
+      "output": "失败原因 → F1",
+      "source": "src/agent/orchestrator.ts",
+      "path": "行迹工作流/E2 无数据说明.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "无数据说明"
+    },
+    {
+      "id": "F1",
+      "name": "结束当前请求",
+      "group": "research",
+      "kind": "start",
+      "description": "本次不生成方案，用户可修改条件后重新提交。",
+      "input": "失败原因",
+      "output": "等待新请求",
+      "source": "src/agent/orchestrator.ts",
+      "path": "行迹工作流/F1 结束当前请求.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "结束当前请求"
+    },
+    {
+      "id": "B3",
+      "name": "候选偏好排序",
+      "group": "research",
+      "kind": "process",
+      "description": "匹配兴趣、必去与排除条件，检查旅行日期和闭馆日。",
+      "input": "可用候选集合",
+      "output": "已排序候选集合",
+      "source": "src/agent/research.ts",
+      "path": "行迹工作流/B3 候选偏好排序.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "候选偏好排序"
+    },
+    {
+      "id": "C1",
+      "name": "地理分区与分天",
+      "group": "plan",
+      "kind": "process",
+      "description": "按地理邻近和兴趣分天，未安排项保留候选池并解释原因。",
+      "input": "已排序候选集合",
+      "output": "分天草案",
+      "source": "src/agent/outline.ts",
+      "path": "行迹工作流/C1 地理分区与分天.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "地理分区与分天"
+    },
+    {
+      "id": "C2",
+      "name": "计算逐段时间轴",
+      "group": "plan",
+      "kind": "process",
+      "description": "由程序累加游览、餐饮与通勤时间，修改后重算。",
+      "input": "分天草案",
+      "output": "每日时间安排",
+      "source": "src/agent/schedule.ts",
+      "path": "行迹工作流/C2 计算逐段时间轴.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "计算逐段时间轴"
+    },
+    {
+      "id": "C3",
+      "name": "汇总费用与口径",
+      "group": "plan",
+      "kind": "process",
+      "description": "统计门票、住宿、餐饮与市内交通；标明估算与缺口。",
+      "input": "每日时间安排",
+      "output": "费用分项",
+      "source": "src/domain/summary.ts",
+      "path": "行迹工作流/C3 汇总费用与口径.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "汇总费用与口径"
+    },
+    {
+      "id": "V1",
+      "name": "八类规则校验",
+      "group": "verify",
+      "kind": "process",
+      "description": "检查时间、营业、地理、预算、节奏、预约、天气和通勤。",
+      "input": "结构化行程、已有事实",
+      "output": "错误列表、风险提醒、数据覆盖度",
+      "source": "src/verifier/rules.ts",
+      "path": "行迹工作流/V1 八类规则校验.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "八类规则校验"
+    },
+    {
+      "id": "D3",
+      "name": "是否有阻断错误",
+      "group": "verify",
+      "kind": "decision",
+      "description": "区分错误、警告和未覆盖项；无错误可输出，有错误需修复。",
+      "input": "错误列表",
+      "output": "是 → D4；否 → P1",
+      "source": "src/verifier/index.ts",
+      "path": "行迹工作流/D3 是否有阻断错误.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "是否有阻断错误"
+    },
+    {
+      "id": "D4",
+      "name": "修复轮次与进展",
+      "group": "repair",
+      "kind": "decision",
+      "description": "常规修复最多三轮，首轮允许进入，之后须有改善。",
+      "input": "已执行修复轮次、修复前错误数",
+      "output": "允许 → R1；停止 → E3",
+      "source": "src/agent/repair.ts",
+      "path": "行迹工作流/D4 修复轮次与进展.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "修复轮次与进展"
+    },
+    {
+      "id": "R1",
+      "name": "生成定向修复",
+      "group": "repair",
+      "kind": "process",
+      "description": "根据规则选择移位、换点、删点或住宿调整，尊重锁定条件。",
+      "input": "结构化行程、规则问题",
+      "output": "修复候选方案",
+      "source": "src/agent/repair.ts",
+      "path": "行迹工作流/R1 生成定向修复.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "生成定向修复"
+    },
+    {
+      "id": "R2",
+      "name": "重算回验与回退",
+      "group": "repair",
+      "kind": "process",
+      "description": "错误数减少才接受；无改善则回退本轮候选并停止。",
+      "input": "修复候选方案",
+      "output": "接受新方案、没有改善",
+      "source": "src/agent/reflow.ts",
+      "path": "行迹工作流/R2 重算回验与回退.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "重算回验与回退"
+    },
+    {
+      "id": "E3",
+      "name": "最小行程与残余风险",
+      "group": "repair",
+      "kind": "error",
+      "description": "常规修复停止后评估降级，仍无解则列明残余问题。",
+      "input": "best_plan、unresolved",
+      "output": "带风险的参考行程、停止原因",
+      "source": "src/agent/repair.ts",
+      "path": "行迹工作流/E3 最小行程与残余风险.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "最小行程与残余风险"
+    },
+    {
+      "id": "P1",
+      "name": "警告清理与最终回验",
+      "group": "verify",
+      "kind": "process",
+      "description": "警告清理不得新增错误；通过、未通过和未覆盖分别表达。",
+      "input": "最终行程",
+      "output": "validation_report",
+      "source": "src/verifier/index.ts",
+      "path": "行迹工作流/P1 警告清理与最终回验.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "警告清理与最终回验"
+    },
+    {
+      "id": "O1",
+      "name": "生成结果与解释",
+      "group": "output",
+      "kind": "model",
+      "description": "汇总每日安排、费用、候选项、数据缺口和未解决风险。",
+      "input": "最终行程、检查报告",
+      "output": "中文结果",
+      "source": "src/agent/orchestrator.ts",
+      "path": "行迹工作流/O1 生成结果与解释.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "生成结果与解释"
+    },
+    {
+      "id": "O2",
+      "name": "展示并征求确认",
+      "group": "output",
+      "kind": "user",
+      "description": "展示时间轴和校验依据，允许用户确认或提出修改。",
+      "input": "中文结果",
+      "output": "用户反馈",
+      "source": "src/App.tsx",
+      "path": "行迹工作流/O2 展示并征求确认.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "展示并征求确认"
+    },
+    {
+      "id": "D6",
+      "name": "用户是否修改",
+      "group": "output",
+      "kind": "decision",
+      "description": "用户确认则保存；修改则识别影响范围并重排。",
+      "input": "用户反馈",
+      "output": "是 → U1；否 → F0",
+      "source": "src/agent/replanStep.ts",
+      "path": "行迹工作流/D6 用户是否修改.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "用户是否修改"
+    },
+    {
+      "id": "U1",
+      "name": "识别修改范围",
+      "group": "output",
+      "kind": "model",
+      "description": "日期预算等全局变化返回需求；删点时长等局部变化重算。",
+      "input": "修改要求",
+      "output": "修改范围",
+      "source": "src/agent/replanStep.ts",
+      "path": "行迹工作流/U1 识别修改范围.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "识别修改范围"
+    },
+    {
+      "id": "U2",
+      "name": "版本记录与应用变更",
+      "group": "output",
+      "kind": "process",
+      "description": "保留父版本，局部回C2，全局回A1，校验报告同步更新。",
+      "input": "修改范围、结构化行程",
+      "output": "新行程版本",
+      "source": "src/domain/schema.ts",
+      "path": "行迹工作流/U2 版本记录与应用变更.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "版本记录与应用变更"
+    },
+    {
+      "id": "F0",
+      "name": "确认保存与导出",
+      "group": "output",
+      "kind": "start",
+      "description": "保存经过用户确认的行程，并保留估算和风险说明。",
+      "input": "用户确认的行程",
+      "output": "结构化文件、日历或分享文本",
+      "source": "src/utils/share.ts",
+      "path": "行迹工作流/F0 确认保存与导出.md",
+      "layer": "workflow",
+      "status": "完整设计",
+      "originalName": "确认保存与导出"
+    },
+    {
+      "id": "RULE_TIME_OVERLAP",
+      "name": "时间重叠",
+      "group": "verify",
+      "kind": "rule",
+      "description": "检查相邻项目和通勤时间是否重叠。",
+      "input": "结构化行程、检查上下文",
+      "output": "规则问题、已覆盖范围",
+      "source": "src/verifier/rules.ts",
+      "path": "行迹工作流/规则 时间重叠.md",
+      "layer": "rule",
+      "status": "本地代码",
+      "originalName": "时间重叠"
+    },
+    {
+      "id": "RULE_OUTSIDE_OPENING",
+      "name": "营业与闭馆",
+      "group": "verify",
+      "kind": "rule",
+      "description": "检查营业时间和闭馆日；未知项标记未覆盖。",
+      "input": "结构化行程、检查上下文",
+      "output": "规则问题、已覆盖范围",
+      "source": "src/verifier/rules.ts",
+      "path": "行迹工作流/规则 营业与闭馆.md",
+      "layer": "rule",
+      "status": "本地代码",
+      "originalName": "营业与闭馆"
+    },
+    {
+      "id": "RULE_GEO_SCATTER",
+      "name": "地理跨度",
+      "group": "verify",
+      "kind": "rule",
+      "description": "检查单日距离和通勤量。",
+      "input": "结构化行程、检查上下文",
+      "output": "规则问题、已覆盖范围",
+      "source": "src/verifier/rules.ts",
+      "path": "行迹工作流/规则 地理跨度.md",
+      "layer": "rule",
+      "status": "本地代码",
+      "originalName": "地理跨度"
+    },
+    {
+      "id": "RULE_BUDGET_EXCEEDED",
+      "name": "预算超限",
+      "group": "verify",
+      "kind": "rule",
+      "description": "核对已纳入费用与预算口径。",
+      "input": "结构化行程、检查上下文",
+      "output": "规则问题、已覆盖范围",
+      "source": "src/verifier/rules.ts",
+      "path": "行迹工作流/规则 预算超限.md",
+      "layer": "rule",
+      "status": "本地代码",
+      "originalName": "预算超限"
+    },
+    {
+      "id": "RULE_OVER_PACE",
+      "name": "节奏超载",
+      "group": "verify",
+      "kind": "rule",
+      "description": "检查单日时长和项目数量。",
+      "input": "结构化行程、检查上下文",
+      "output": "规则问题、已覆盖范围",
+      "source": "src/verifier/rules.ts",
+      "path": "行迹工作流/规则 节奏超载.md",
+      "layer": "rule",
+      "status": "本地代码",
+      "originalName": "节奏超载"
+    },
+    {
+      "id": "RULE_BOOKING_RISK",
+      "name": "预约风险",
+      "group": "verify",
+      "kind": "rule",
+      "description": "需预约项目必须明确提示。",
+      "input": "结构化行程、检查上下文",
+      "output": "规则问题、已覆盖范围",
+      "source": "src/verifier/rules.ts",
+      "path": "行迹工作流/规则 预约风险.md",
+      "layer": "rule",
+      "status": "本地代码",
+      "originalName": "预约风险"
+    },
+    {
+      "id": "RULE_WEATHER_CONFLICT",
+      "name": "天气冲突",
+      "group": "verify",
+      "kind": "rule",
+      "description": "仅有明确天气输入时执行，模拟须标记。",
+      "input": "结构化行程、检查上下文",
+      "output": "规则问题、已覆盖范围",
+      "source": "src/verifier/rules.ts",
+      "path": "行迹工作流/规则 天气冲突.md",
+      "layer": "rule",
+      "status": "本地代码",
+      "originalName": "天气冲突"
+    },
+    {
+      "id": "RULE_TRANSIT_UNREACHABLE",
+      "name": "通勤可达性",
+      "group": "verify",
+      "kind": "rule",
+      "description": "单段120分钟或60公里为本地估算阈值。",
+      "input": "结构化行程、检查上下文",
+      "output": "规则问题、已覆盖范围",
+      "source": "src/verifier/rules.ts",
+      "path": "行迹工作流/规则 通勤可达性.md",
+      "layer": "rule",
+      "status": "本地代码",
+      "originalName": "通勤可达性"
+    }
+  ],
+  "edges": [
+    {
+      "source": "S0",
+      "target": "A1",
+      "label": "触发",
+      "type": "flow"
+    },
+    {
+      "source": "A1",
+      "target": "A2",
+      "label": "结构化需求",
+      "type": "flow"
+    },
+    {
+      "source": "A2",
+      "target": "D1",
+      "label": "完整性",
+      "type": "flow"
+    },
+    {
+      "source": "D1",
+      "target": "A3",
+      "label": "否",
+      "type": "flow"
+    },
+    {
+      "source": "A3",
+      "target": "A1",
+      "label": "补充",
+      "type": "flow"
+    },
+    {
+      "source": "D1",
+      "target": "B1",
+      "label": "是",
+      "type": "flow"
+    },
+    {
+      "source": "B1",
+      "target": "B2",
+      "label": "正常",
+      "type": "flow"
+    },
+    {
+      "source": "B1",
+      "target": "E1",
+      "label": "异常",
+      "type": "flow"
+    },
+    {
+      "source": "E1",
+      "target": "B2",
+      "label": "降级结果",
+      "type": "flow"
+    },
+    {
+      "source": "B2",
+      "target": "D2",
+      "label": "候选检查",
+      "type": "flow"
+    },
+    {
+      "source": "D2",
+      "target": "E2",
+      "label": "否",
+      "type": "flow"
+    },
+    {
+      "source": "E2",
+      "target": "F1",
+      "label": "停止",
+      "type": "flow"
+    },
+    {
+      "source": "D2",
+      "target": "B3",
+      "label": "是",
+      "type": "flow"
+    },
+    {
+      "source": "B3",
+      "target": "C1",
+      "label": "筛选完成",
+      "type": "flow"
+    },
+    {
+      "source": "C1",
+      "target": "C2",
+      "label": "编排",
+      "type": "flow"
+    },
+    {
+      "source": "C2",
+      "target": "C3",
+      "label": "计算",
+      "type": "flow"
+    },
+    {
+      "source": "C3",
+      "target": "V1",
+      "label": "校验",
+      "type": "flow"
+    },
+    {
+      "source": "V1",
+      "target": "D3",
+      "label": "问题分级",
+      "type": "flow"
+    },
+    {
+      "source": "D3",
+      "target": "D4",
+      "label": "有错误",
+      "type": "flow"
+    },
+    {
+      "source": "D3",
+      "target": "P1",
+      "label": "无错误",
+      "type": "flow"
+    },
+    {
+      "source": "D4",
+      "target": "R1",
+      "label": "允许",
+      "type": "flow"
+    },
+    {
+      "source": "R1",
+      "target": "R2",
+      "label": "候选修复",
+      "type": "flow"
+    },
+    {
+      "source": "R2",
+      "target": "V1",
+      "label": "改善后接受",
+      "type": "flow"
+    },
+    {
+      "source": "R2",
+      "target": "E3",
+      "label": "未改善回退",
+      "type": "flow"
+    },
+    {
+      "source": "D4",
+      "target": "E3",
+      "label": "达到上限",
+      "type": "flow"
+    },
+    {
+      "source": "E3",
+      "target": "P1",
+      "label": "降级后回验",
+      "type": "flow"
+    },
+    {
+      "source": "P1",
+      "target": "O1",
+      "label": "最终报告",
+      "type": "flow"
+    },
+    {
+      "source": "O1",
+      "target": "O2",
+      "label": "展示",
+      "type": "flow"
+    },
+    {
+      "source": "O2",
+      "target": "D6",
+      "label": "用户反馈",
+      "type": "flow"
+    },
+    {
+      "source": "D6",
+      "target": "F0",
+      "label": "确认",
+      "type": "flow"
+    },
+    {
+      "source": "D6",
+      "target": "U1",
+      "label": "修改",
+      "type": "flow"
+    },
+    {
+      "source": "U1",
+      "target": "U2",
+      "label": "应用修改",
+      "type": "flow"
+    },
+    {
+      "source": "U2",
+      "target": "A1",
+      "label": "全局变更",
+      "type": "flow"
+    },
+    {
+      "source": "U2",
+      "target": "C2",
+      "label": "局部变更",
+      "type": "flow"
+    },
+    {
+      "source": "V1",
+      "target": "RULE_TIME_OVERLAP",
+      "label": "TIME_OVERLAP",
+      "type": "rule"
+    },
+    {
+      "source": "V1",
+      "target": "RULE_OUTSIDE_OPENING",
+      "label": "OUTSIDE_OPENING",
+      "type": "rule"
+    },
+    {
+      "source": "V1",
+      "target": "RULE_GEO_SCATTER",
+      "label": "GEO_SCATTER",
+      "type": "rule"
+    },
+    {
+      "source": "V1",
+      "target": "RULE_BUDGET_EXCEEDED",
+      "label": "BUDGET_EXCEEDED",
+      "type": "rule"
+    },
+    {
+      "source": "V1",
+      "target": "RULE_OVER_PACE",
+      "label": "OVER_PACE",
+      "type": "rule"
+    },
+    {
+      "source": "V1",
+      "target": "RULE_BOOKING_RISK",
+      "label": "BOOKING_RISK",
+      "type": "rule"
+    },
+    {
+      "source": "V1",
+      "target": "RULE_WEATHER_CONFLICT",
+      "label": "WEATHER_CONFLICT",
+      "type": "rule"
+    },
+    {
+      "source": "V1",
+      "target": "RULE_TRANSIT_UNREACHABLE",
+      "label": "TRANSIT_UNREACHABLE",
+      "type": "rule"
+    }
+  ]
+}

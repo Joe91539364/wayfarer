@@ -1,0 +1,5 @@
+node_modules/
+plugin/data.json
+plugin/last-business-run.json
+*.log
+test-results/

@@ -453,3 +453,7 @@ docs/            plan-v3.md（规划书 v3.0 源文件）
 `npm run eval` 会跑 20 条用例（完整 / 残缺 / 冲突 / 修改 / 对抗 五组），输出 `eval-report.md`。
 
 当前结果：通过率 100%，首次通过率 95%，POI 有效率 100%，70 个单测全绿。
+
+## Obsidian Agent 运行全景
+
+新增[行迹运行可视化插件](integrations/obsidian/README.md)：纸面工程全景、立体微粒、真实阶段输入输出与三方案比较。右侧短杠可悬停、点击查看对应输出，支持搜索定位。安装包与源码均位于 `integrations/obsidian/`。

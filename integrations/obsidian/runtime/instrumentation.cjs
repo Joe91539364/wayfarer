@@ -1,0 +1,11 @@
+const fs=require('node:fs'),path=require('node:path');
+module.exports=()=>({name:'phase-payloads',setup(build){build.onLoad({filter:/[\\/]agent[\\/]intake\.ts$/},args=>{let source=fs.readFileSync(args.path,'utf8');const before='INTEREST_KEYWORDS.filter(([re]) => re.test(text))';if(!source.includes(before))throw Error('偏好解析入口已变化');source=source.replace(before,'INTEREST_KEYWORDS.filter(([re]) => { re.lastIndex = 0; return re.test(text); })');return {contents:source,loader:'ts',resolveDir:path.dirname(args.path)};});build.onLoad({filter:/[\\/]agent[\\/]orchestrator\.ts$/},args=>{let source=fs.readFileSync(args.path,'utf8');const replacements=[
+['  detail?: string;','  detail?: string;\n  payload?: Record<string, unknown>;'],
+["detail: meta.interests.join(' / ') || '未指定偏好',","detail: meta.interests.join(' / ') || '未指定偏好',\n    payload: {meta,missing:parsed.missing,notes:parsed.notes},"],
+['detail: `${outline.research.cityName} · 数据源 local-dataset`,','detail: `${outline.research.cityName} · 数据源 local-dataset`,\n    payload: {pool:outline.research.pool,closedOn:outline.research.closedOn},'],
+["message: outline.plans.map((p) => `D${p.day_index} ${p.base_area}`).join(' · '),","message: outline.plans.map((p) => `D${p.day_index} ${p.base_area}`).join(' · '),\n    payload: {plans:outline.plans},"],
+['detail: `${scheduled.unscheduled.length} 个备选进入候选池`,','detail: `${scheduled.unscheduled.length} 个备选进入候选池`,\n    payload: {days:scheduled.days,unscheduled:scheduled.unscheduled},'],
+['detail: first.errors[0]?.message,','detail: first.errors[0]?.message,\n    payload: {result:first},'],
+["detail: repaired.rounds.flatMap((r) => r.actions.map((a) => a.description)).slice(0, 3).join('；'),","detail: repaired.rounds.flatMap((r) => r.actions.map((a) => a.description)).slice(0, 3).join('；'),\n    payload: {rounds:repaired.rounds,unresolved:repaired.unresolved,stopped:repaired.stopped},"],
+['message: `可行性 ${itin.feasibility.summary.passed}/${itin.feasibility.summary.total} 通过`,','message: `可行性 ${itin.feasibility.summary.passed}/${itin.feasibility.summary.total} 通过`,\n    payload: {itinerary:itin,result:finalVerify},']
+];for(const [before,after]of replacements){if(!source.includes(before))throw Error('阶段载荷插入点已变化：'+before);source=source.replace(before,after);}return {contents:source,loader:'ts',resolveDir:path.dirname(args.path)};});}});

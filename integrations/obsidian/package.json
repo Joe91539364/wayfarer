@@ -1,0 +1,13 @@
+{
+  "name": "wayfarer-obsidian-observer",
+  "private": true,
+  "type": "commonjs",
+  "version": "4.1.0",
+  "scripts": {
+    "build": "node build.cjs",
+    "test": "node --test tests/output-hit-test.test.cjs tests/runtime.test.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.5"
+  }
+}

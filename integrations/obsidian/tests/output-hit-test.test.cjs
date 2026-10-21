@@ -1,0 +1,8 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const {pointSegmentDistance,pickOutput,outputKey}=require('../src/output-hit-test');
+const {flatten}=require('../src/ops-board');
+test('线段中点、端点、零长度及无效坐标',()=>{const s={x1:10,y1:20,x2:40,y2:20};assert.equal(pointSegmentDistance({x:25,y:24},s),4);assert.equal(pointSegmentDistance({x:7,y:16},s),5);assert.equal(pointSegmentDistance({x:3,y:4},{x1:0,y1:0,x2:0,y2:0}),5);assert.equal(pointSegmentDistance({x:NaN,y:4},s),Infinity);});
+test('回归：远离谱线起点的移动短杠可选中',()=>{const marker={kind:'output',key:'actual',x1:700,y1:230,x2:717,y2:234};assert.equal(pickOutput({x:709,y:232},[marker],[])?.key,'actual');assert.equal(pickOutput({x:400,y:50},[marker],[]),null);});
+test('短杠优先于相交射线，射线仍可追溯字段',()=>{const marker={key:'dash',x1:20,y1:20,x2:30,y2:20},ray={key:'ray',x1:25,y1:0,x2:25,y2:100};assert.equal(pickOutput({x:25,y:21},[marker],[ray]).key,'dash');assert.equal(pickOutput({x:25,y:65},[marker],[ray]).key,'ray');});
+test('输出身份包含方案阶段路径且不依赖排序或值',()=>{const a={plan:0,record:{stage:'render'},path:'预算',value:3};assert.equal(outputKey(a),outputKey({...a,value:8}));assert.notEqual(outputKey(a),outputKey({...a,plan:1}));assert.notEqual(outputKey(a),outputKey({...a,record:{stage:'verify'}}));});
+test('字段保留实际类型与空对象，不将字符串注入 DOM',()=>{const rows=flatten({'空值':null,'通过':true,'失败':false,'对象':{},'数组':[],'文本':'<img src=x>'});assert.equal(rows.find(r=>r.path==='空值').payload,null);assert.equal(rows.find(r=>r.path==='通过').payload,true);assert.equal(rows.find(r=>r.path==='失败').value,'否');assert.deepEqual(rows.find(r=>r.path==='对象').payload,{});assert.deepEqual(rows.find(r=>r.path==='数组').payload,[]);assert.equal(rows.find(r=>r.path==='文本').payload,'<img src=x>');});

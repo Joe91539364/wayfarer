@@ -1,0 +1,9 @@
+{
+  "id": "wayfarer-workflow-atlas",
+  "name": "行迹智能体业务运行图",
+  "version": "4.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "行迹工程全景与三维业务微粒：真实输入输出、多方案、校验、耗时与异常。",
+  "author": "Local workspace",
+  "isDesktopOnly": true
+}
