@@ -33,7 +33,7 @@ import { networkInterfaces } from 'node:os';
 import { ROOT, allSourceMeta, loadKeys, loadSettings, runCrawl, saveKeys, saveSettings } from './crawler';
 import { ping, json } from './llm';
 import { listMoments, momentFile, momentSize, removeMoment, saveMoment, updateMoment } from './moments';
-import { buildCityPack } from './sources/citypack';
+import { buildCityPack, searchPlaces } from './sources/citypack';
 import { PLATFORM_MAP } from '../src/data/catalog';
 import type { Catalog } from '../src/data/catalog';
 
@@ -340,6 +340,28 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // 按关键字搜一个点：城市包里没有的地方（某家店 / 小众景点），用户想自己加
+  if (url.pathname === '/api/place-search') {
+    const kw = (url.searchParams.get('kw') ?? '').trim();
+    const city = (url.searchParams.get('city') ?? '').trim();
+    const k = loadKeys().amap;
+    if (!kw) {
+      send(res, 400, JSON.stringify({ error: '缺少 kw 参数' }));
+      return;
+    }
+    if (!k) {
+      send(res, 503, JSON.stringify({ error: '没有高德 Key，无法现搜', needKey: 'amap' }));
+      return;
+    }
+    try {
+      const pois = await searchPlaces(kw, city || '重庆', k);
+      send(res, 200, JSON.stringify({ pois }));
+    } catch (e) {
+      send(res, 502, JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+    }
+    return;
+  }
+
   // 城市坐标（城际交通要用）
   if (url.pathname === '/api/geocode') {
     const name = (url.searchParams.get('name') ?? '').trim();
@@ -596,6 +618,11 @@ const server = createServer(async (req, res) => {
 
   // SPA 兜底
   const index = resolve(DIST, 'index.html');
+  if (url.pathname.startsWith('/api/')) {
+    // 旧进程跑着旧代码时，未知接口不能悄悄回一张 HTML —— 前端会把它当 JSON 嗑
+    send(res, 404, JSON.stringify({ error: `没有这个接口：${url.pathname}` }), MIME['.json']);
+    return;
+  }
   if (existsSync(index)) {
     send(res, 200, readFileSync(index, 'utf8'), MIME['.html']);
     return;

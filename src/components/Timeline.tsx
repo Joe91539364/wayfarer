@@ -1,8 +1,9 @@
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 import type { Day, Itinerary, ItineraryItem, Violation } from '../domain/schema';
 import { CATEGORY_CN, TRANSIT_CN } from '../domain/schema';
 import { weekdayLabel, formatDateCN, toMin, durationMin } from '../domain/time';
 import { solarTimes } from '../domain/solar';
+import { daySlots } from '../domain/gaps';
 import { cnMoney } from '../domain/summary';
 import { DAY_COLORS } from './MapView';
 import {
@@ -12,6 +13,7 @@ import {
   IconHeart,
   IconLock,
   IconMenu,
+  IconPlus,
   IconSun,
   IconSwap,
   IconTrain,
@@ -36,6 +38,8 @@ interface Props {
   nowInfo?: { date: string; hhmm: string } | null;
   /** 目的地时区偏移（分钟），算日出日落用 */
   tzOffsetMin?: number;
+  /** 点空档提示条上的「+」，把这一天交出去让用户自己加点 */
+  onAddPlace?: (dayIndex: number, slot: import('../domain/gaps').DaySlot) => void;
 }
 
 function ModeIcon({ mode }: { mode: string | null }) {
@@ -195,6 +199,7 @@ function DayBlock({
   nowInfo,
   tzOffsetMin,
   active,
+  onAddPlace,
 }: {
   day: Day;
   warns: Violation[];
@@ -209,6 +214,7 @@ function DayBlock({
   nowInfo?: { date: string; hhmm: string } | null;
   tzOffsetMin?: number;
   active: boolean;
+  onAddPlace?: (dayIndex: number, slot: import('../domain/gaps').DaySlot) => void;
 }) {
   const [collapsed, setCollapsed] = useState(collapsedDefault);
   const color = DAY_COLORS[(day.day_index - 1) % DAY_COLORS.length];
@@ -345,25 +351,36 @@ function DayBlock({
                 <div className="now-label">现在</div>
               </div>
             );
-            const rows = day.items.map((item) => {
-              const insertNow = nowMin != null && !placed && nowMin < toMin(item.start_time);
-              if (insertNow) placed = true;
-              const body = renderRow(item);
-              return insertNow ? (
-                <Fragment key={`wrap-${item.id}`}>
-                  {nowRow}
-                  {body}
-                </Fragment>
-              ) : (
-                body
-              );
-            });
-            return (
-              <>
-                {rows}
-                {nowMin != null && !placed && nowRow}
-              </>
+            const slots = onAddPlace ? daySlots(day) : [];
+            const slotRow = (slot: import('../domain/gaps').DaySlot) => (
+              <div className="slot-row" key={`slot-${slot.start}`}>
+                <div className="time-col">{slot.start}</div>
+                <div className="rail">
+                  <div className="rail-dot slot" />
+                </div>
+                <button className="slot-add" onClick={() => onAddPlace?.(day.day_index, slot)}>
+                  <IconPlus size={12} />
+                  <span>{slot.label}</span>
+                  <em>加点什么</em>
+                </button>
+              </div>
             );
+            const nodes: React.ReactNode[] = [];
+            for (const item of day.items) {
+              const before = slots.find((s) => s.kind !== 'evening' && s.end === item.start_time);
+              if (before) nodes.push(slotRow(before));
+              const insertNow = nowMin != null && !placed && nowMin < toMin(item.start_time);
+              if (insertNow) {
+                placed = true;
+                nodes.push(nowRow);
+              }
+              nodes.push(renderRow(item));
+            }
+            if (nowMin != null && !placed) nodes.push(nowRow);
+            // 收工后的空档放在最后：本地最常发生的就是「13 点就没事干了」
+            const tail = slots.find((s) => s.kind === 'evening');
+            if (tail) nodes.push(slotRow(tail));
+            return nodes;
           })()}
           <div className="tiny muted" style={{ marginTop: 8, paddingLeft: 72 }}>
             {transitCount} 段通勤由程序计算 · 可拖动卡片调整顺序
@@ -407,6 +424,7 @@ export default function Timeline(props: Props) {
           nowInfo={props.nowInfo}
           tzOffsetMin={props.tzOffsetMin}
           active={activeDay === day.day_index}
+          onAddPlace={props.onAddPlace}
         />
       ))}
     </div>

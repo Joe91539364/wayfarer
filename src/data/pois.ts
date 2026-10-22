@@ -242,6 +242,63 @@ export function poisByCity(city: string): PoiSeed[] {
   return [...POIS.filter((p) => p.city === city), ...EXTRA_POIS.filter((p) => p.city === city)];
 }
 
+const CATEGORY_WORD: Record<string, string> = {
+  sight: '景点 风景 打卡',
+  museum: '博物馆 展馆 美术馆',
+  nature: '公园 山 湖 自然',
+  restaurant: '餐厅 吃 美食 火锅 小吃',
+  cafe: '咖啡 下午茶',
+  shopping: '购物 商场 逛街',
+  nightlife: '酒吧 夜生活 夜市',
+  theme_park: '乐园 游乐场',
+  hiking: '徒步 爬山',
+  hot_spring: '温泉',
+  landmark: '地标 观景',
+};
+
+/**
+ * 「自己想加点什么」的搜索。
+ *
+ * 城市包有 200 个点，用户心里想的那家店未必在候选池里 —— 候选池只放
+ * 「评分够但没排进去」的，这里要能翻遍整座城市。匹配名字、区域、类型词，
+ * 空关键字时按评分给一份「值得去」的清单；给了 near（当天片区）就惩罚 10km
+ * 以外的点 —— 搜「公园」不该把 250km 外的郊区公园顶到最前面。
+ */
+export function searchPois(city: string, keyword: string, limit = 30, near?: { lat: number; lng: number }): PoiSeed[] {
+  const kw = keyword.trim().toLowerCase();
+  const all = poisByCity(city);
+  const distOf = (p: PoiSeed) =>
+    near ? Math.hypot(p.lat - near.lat, p.lng - near.lng) * 111 : 0;
+
+  const rank = (a: PoiSeed, b: PoiSeed) => {
+    if (distOf(a) > 15 && distOf(b) <= 15) return 1;
+    if (distOf(b) > 15 && distOf(a) <= 15) return -1;
+    return b.rating - a.rating;
+  };
+
+  if (!kw) {
+    return [...all].sort(rank).slice(0, limit);
+  }
+  const scored: { p: PoiSeed; s: number }[] = [];
+  for (const p of all) {
+    const name = p.name.toLowerCase();
+    const area = (p.area ?? '').toLowerCase();
+    const words = `${CATEGORY_WORD[p.category] ?? ''} ${(p.tags ?? []).join(' ')} ${p.blurb ?? ''}`.toLowerCase();
+    let s = 0;
+    if (name === kw) s = 100;
+    else if (name.includes(kw)) s = 80 - Math.min(20, name.length - kw.length);
+    else if (area.includes(kw)) s = 40;
+    else if (words.includes(kw)) s = 30;
+    if (s <= 0) continue;
+    s += Math.min(12, p.rating * 2);
+    // 词表/区域这种弱匹配，10km 外就明显降权；名字直击的不惩罚（用户点名要它）
+    if (s < 45 && distOf(p) > 10) s -= Math.min(25, (distOf(p) - 10) * 2);
+    scored.push({ p, s });
+  }
+  return scored.sort((a, b) => b.s - a.s).slice(0, limit).map((x) => x.p);
+}
+
+
 /** 预算降档时使用的备选住宿（真实个人项目里应来自酒店 API）。 */
 export const HOSTELS: Record<string, { name: string; price: number }> = {
   chengdu: { name: '春熙路 · 青旅床位', price: 95 },

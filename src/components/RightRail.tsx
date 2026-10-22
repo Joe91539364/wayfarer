@@ -9,7 +9,7 @@ import MapView from './MapView';
 import { hotelsByCity } from '../data/hotels';
 import FoodPanel from './FoodPanel';
 import { hotelLive } from '../domain/live';
-import { IconAlert, IconCheck, IconPlus, IconSpark } from './icons';
+import { IconAlert, IconCheck, IconPlus, IconSearch, IconSpark } from './icons';
 
 interface Props {
   itinerary: Itinerary;
@@ -18,6 +18,8 @@ interface Props {
   onOpenHotel: (dayIndex: number) => void;
   onSelectDay: (n: number) => void;
   onAddCandidate: (c: Candidate) => void;
+  onOpenAddPlace: () => void;
+  onSetBudget: (amount: number) => void;
   onWhatIf: (kind: WhatIfKind, payload?: { budget?: number; dayIndex?: number }) => void;
   onApply: () => void;
   onDiscard: () => void;
@@ -37,7 +39,7 @@ function suggestedBudget(total: number): string {
 }
 
 export default function RightRail(props: Props) {
-  const { itinerary, activeDay, clock, onOpenHotel, onSelectDay, onAddCandidate, onWhatIf, onApply, onDiscard, whatIfResult, busy } = props;
+  const { itinerary, activeDay, clock, onOpenHotel, onSelectDay, onAddCandidate, onOpenAddPlace, onSetBudget, onWhatIf, onApply, onDiscard, whatIfResult, busy } = props;
   const [poolTab, setPoolTab] = useState<'sight' | 'food'>('sight');
   const [budgetDraft, setBudgetDraft] = useState(() => suggestedBudget(totalOf(itinerary)));
   const diffRef = useRef<HTMLDivElement | null>(null);
@@ -74,6 +76,18 @@ export default function RightRail(props: Props) {
   const meals = useMemo(() => mealPerDay(itinerary), [itinerary]);
   const avgMeals = meals.length ? meals.reduce((s, m) => s + m.meals, 0) / meals.length : 0;
   const upgraded = /行政楼层/.test(itinerary.days[0]?.lodging?.name ?? '');
+
+  // 预算档位：以当前预算为「舒适」基准，向两侧推；连既成的门票饭钱都盖不住的档不给点
+  const tiers = useMemo(() => {
+    const round = (n: number) => Math.max(500, Math.round(n / 100) * 100);
+    const other = total - (breakdown.lodging ?? 0);
+    return [
+      { key: 'eco', label: '节俭', amount: round(budget * 0.7) },
+      { key: 'comfy', label: '舒适', amount: budget },
+      { key: 'lush', label: '宽裕', amount: round(budget * 1.5) },
+    ].map((t) => ({ ...t, disabled: t.amount < other * 1.05 }));
+  }, [budget, total, breakdown]);
+  const [customBudget, setCustomBudget] = useState('');
 
   return (
     <div>
@@ -121,6 +135,36 @@ export default function RightRail(props: Props) {
               <span>留 {cnMoney(budget - total)} 机动（购物、临时加项）</span>
             )}
             {upgraded && <span className="chip accent">住宿已升档</span>}
+          </div>
+          <div className="tier-row">
+            <span className="tier-cap">预算档位</span>
+            {tiers.map((t) => (
+              <button
+                key={t.key}
+                className={`tier-btn ${budget === t.amount ? 'on' : ''}`}
+                disabled={t.disabled || busy}
+                title={t.disabled ? '连已经定下的门票和饭钱都盖不住' : `预算改到 ${cnMoney(t.amount)}，立即重新安排`}
+                onClick={() => onSetBudget(t.amount)}
+              >
+                {t.label}
+                <i>{cnMoney(t.amount)}</i>
+              </button>
+            ))}
+          </div>
+          <div className="tier-custom">
+            <input
+              value={customBudget}
+              onChange={(e) => setCustomBudget(e.target.value.replace(/[^\d]/g, ''))}
+              placeholder="自定义金额"
+              inputMode="numeric"
+            />
+            <button
+              className="btn btn-sm"
+              disabled={!customBudget || Number(customBudget) === budget || busy}
+              onClick={() => onSetBudget(Number(customBudget))}
+            >
+              按这个预算重排
+            </button>
           </div>
           <div className="tiny muted" style={{ marginTop: 6 }}>
             住宿 {cnMoney((itinerary.days[0]?.lodging?.cost.amount ?? 0) * itinerary.days.length)} · 已含每日房费
@@ -223,6 +267,9 @@ export default function RightRail(props: Props) {
           <div className="tiny muted" style={{ marginTop: 6 }}>
             点 + 会插到第 {activeDay} 天，并立即重跑时间与校验
           </div>
+          <button className="btn btn-sm" style={{ width: '100%', marginTop: 8 }} onClick={onOpenAddPlace}>
+            <IconSearch size={12} /> 自己加个地方（搜地名 / 店名）
+          </button>
         </div>
       </div>
 

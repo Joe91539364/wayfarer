@@ -283,3 +283,30 @@ export async function buildCityPack(name: string, key: string): Promise<CityPack
 
   return pack;
 }
+
+/**
+ * 按关键字现场搜一个点（「我想加磁器口古镇」但它不在城市包里）。
+ *
+ * 城市包是 6 个类目 × 每类 25 条的抽样，具体某家店/某个小众景点经常漏掉。
+ * 这里直接打高德的 POI 关键字检索，把结果落成 PoiSeed，前端当临时点插进行程，
+ * 不写进缓存 —— 这是用户的一次性选择，不该污染城市包。
+ */
+export async function searchPlaces(keyword: string, cityName: string, key: string): Promise<PoiSeed[]> {
+  const kw = keyword.trim();
+  if (!kw) return [];
+  const cityParam = cityName.trim();
+  const url =
+    `${ENDPOINT}?key=${key}&keywords=${encodeURIComponent(kw)}` +
+    `&city=${encodeURIComponent(cityParam)}&citylimit=true&offset=10&page=1&extensions=all`;
+  const data = await amapGet(url);
+  const list = (data?.pois as AmapPoi[]) ?? [];
+  const out: PoiSeed[] = [];
+  const code = `amap-${cityParam}`;
+  for (let i = 0; i < list.length; i++) {
+    const seed = toSeed(list[i], code, i);
+    if (!seed) continue;
+    if (out.some((x) => x.name === seed.name)) continue;
+    out.push(seed);
+  }
+  return out;
+}

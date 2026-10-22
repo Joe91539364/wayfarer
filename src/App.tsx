@@ -5,6 +5,7 @@ import { reflowDay } from './agent/reflow';
 import { insertCandidate, removeItem, type RepairResult } from './agent/repair';
 import { buildContext, NeedsClarification, revalidate, runAgent, type StageEvent } from './agent/orchestrator';
 import { whatIf, type WhatIfKind, type WhatIfResult } from './agent/whatif';
+import { setBudget } from './agent/budget';
 import { importFromText, type ImportResult } from './agent/importer';
 import { DEFAULT_LLM, loadLlmConfig, saveLlmConfig, type LlmConfig } from './agent/llm';
 import { describeMeta, intake, type IntakeResult } from './agent/intake';
@@ -29,6 +30,7 @@ import ImportModal from './components/ImportModal';
 import PoiDetail from './components/PoiDetail';
 import SyncModal from './components/SyncModal';
 import HotelModal from './components/HotelModal';
+import AddPlaceModal from './components/AddPlaceModal';
 import RouteRibbon, { clockFromSlider } from './components/RouteRibbon';
 import LoginModal from './components/LoginModal';
 import DataSourcesModal from './components/DataSourcesModal';
@@ -91,6 +93,8 @@ export default function App() {
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const [hotelDay, setHotelDay] = useState<number | null>(null);
+  /** 「自己加点」弹窗：哪一天、哪个空档（slot 为空表示从右栏搜） */
+  const [addPlace, setAddPlace] = useState<{ dayIndex: number; slot: import('./domain/gaps').DaySlot | null } | null>(null);
   const { now, driftMs, synced } = useNow();
   const [followReal, setFollowReal] = useState(true);
   const [seek, setSeek] = useState(0);
@@ -350,6 +354,39 @@ export default function App() {
     const next = insertCandidate(iti, activeDay - 1, c, 99);
     commit(next);
     notify(`已把「${c.name}」插入第 ${activeDay} 天并重新校验`);
+  }
+
+  /** 手动改预算：换档后立刻重新落地这笔钱（升档住宿 / 降档让钱） */
+  function setBudgetTo(amount: number) {
+    if (!iti || !Number.isFinite(amount) || amount <= 0) return;
+    const cloned = JSON.parse(JSON.stringify(iti)) as Itinerary;
+    const res = setBudget(cloned.meta, cloned.days, amount);
+    commit(cloned);
+    notify(res.notes[0] ?? `预算已改为 ${cnMoney(amount)}`);
+  }
+
+  /** 自己加点：插到指定天的空档里，然后重排这一天，再整体重新校验 */
+  function addPlaceTo(c: Candidate, dayIndex: number) {
+    if (!iti) return;
+    const day = iti.days.find((d) => d.day_index === dayIndex);
+    if (!day) return;
+    const slot = addPlace?.dayIndex === dayIndex ? addPlace.slot : null;
+    // 空档在中间就插在那个位置（补缝隙），收工后的空档直接排到末尾
+    let position = 99;
+    if (slot && slot.kind !== 'evening') {
+      const acts = day.items.filter((i) => i.type !== 'transit');
+      const at = acts.findIndex((i) => i.start_time === slot.end);
+      if (at >= 0) position = at;
+    }
+    const inserted = insertCandidate(iti, dayIndex - 1, c, position);
+    commit(inserted);
+    const after = inserted.days.find((d) => d.day_index === dayIndex);
+    const placed = after?.items.filter((i) => i.type !== 'transit').find((i) => i.name === c.name);
+    notify(
+      placed
+        ? `已把「${c.name}」加进第 ${dayIndex} 天，${placed.start_time}-${placed.end_time}`
+        : `已把「${c.name}」加进第 ${dayIndex} 天`,
+    );
   }
 
   function pickReplacement(c: Candidate) {
@@ -958,6 +995,10 @@ export default function App() {
               momentByPoi={momentByPoi}
               nowInfo={{ date: nowLocal.date, hhmm: nowLocal.hhmm }}
               tzOffsetMin={nowLocal.offsetMin}
+              onAddPlace={(d, slot) => {
+                setActiveDay(d);
+                setAddPlace({ dayIndex: d, slot });
+              }}
             />
           </main>
 
@@ -969,6 +1010,8 @@ export default function App() {
               onOpenHotel={(d) => setHotelDay(d)}
               onSelectDay={setActiveDay}
               onAddCandidate={addCandidate}
+              onOpenAddPlace={() => setAddPlace({ dayIndex: activeDay, slot: null })}
+              onSetBudget={setBudgetTo}
               onWhatIf={runWhatIf}
               onApply={applyWhatIf}
               onDiscard={() => setWhatIfResult(null)}
@@ -1072,6 +1115,19 @@ export default function App() {
 
       {iti && syncOpen && (
         <SyncModal open={syncOpen} onClose={() => setSyncOpen(false)} itinerary={iti} onToast={notify} />
+      )}
+
+      {iti && addPlace && (
+        <AddPlaceModal
+          itinerary={iti}
+          dayIndex={addPlace.dayIndex}
+          slot={addPlace.slot}
+          onClose={() => setAddPlace(null)}
+          onAdd={(c, dayIndex) => {
+            addPlaceTo(c, dayIndex);
+            setAddPlace(null);
+          }}
+        />
       )}
 
       {iti && hotelDay != null && (

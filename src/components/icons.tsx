@@ -52,6 +52,13 @@ export const IconPlus = ({ size, ...p }: P) => (
   </svg>
 );
 
+export const IconSearch = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <circle cx="10.8" cy="10.8" r="6.3" />
+    <path d="M15.4 15.4 20 20" />
+  </svg>
+);
+
 export const IconTrash = ({ size, ...p }: P) => (
   <svg {...base(size)} {...p}>
     <path d="M4.8 7h14.4M9.4 7V4.8h5.2V7M6.6 7l.9 12.2h9l.9-12.2" />

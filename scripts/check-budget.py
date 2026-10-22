@@ -115,6 +115,36 @@ try:
     # 5. 平均正餐数提示
     check("显示出每天几顿", "顿正餐" in body)
 
+    # 6. 预算档位按钮：点「宽裕」预算变 1.5 倍并重新升档，点「节俭」降回来
+    tier_btns = drv.find_elements("css selector", ".tier-btn")
+    check("有预算档位按钮", len(tier_btns) >= 3, f"{len(tier_btns)} 个")
+
+    def read_budget():
+        t = drv.find_element("css selector", ".budget-total span").text
+        return int("".join(ch for ch in t if ch.isdigit()))
+
+    b0 = read_budget()
+    lush = next((b for b in tier_btns if "宽裕" in b.text), None)
+    eco = next((b for b in tier_btns if "节俭" in b.text), None)
+    if lush and eco:
+        lush.click()
+        time.sleep(1.5)
+        b1 = read_budget()
+        check("点宽裕 → 预算变为 1.5 倍", b1 == int(b0 * 1.5 / 100) * 100, f"{b0} → {b1}")
+        total1 = int("".join(ch for ch in drv.find_element("css selector", ".budget-total b").text if ch.isdigit()))
+        check("宽裕档重新安排了预算", total1 > spent, f"{spent} → {total1}")
+
+        eco.click()
+        time.sleep(1.5)
+        b2 = read_budget()
+        check("点节俭 → 预算降为当前档的 0.7 倍", b2 == int(b1 * 0.7 / 100) * 100, f"{b1} → {b2}")
+        total2 = int("".join(ch for ch in drv.find_element("css selector", ".budget-total b").text if ch.isdigit()))
+        check("节俭档不超新预算", total2 <= b2, f"{total2} / {b2}")
+        body2 = drv.find_element("css selector", "body").text
+        check("降档后住宿摘掉行政楼层", "行政楼层" not in body2, "")
+    else:
+        check("找到宽裕/节俭按钮", False)
+
     drv.get_screenshot_as_file(os.path.join(OUT, "budget-1-full.png"))
     # 单独截右栏
     rail = drv.find_element("css selector", ".col-right")

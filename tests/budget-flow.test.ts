@@ -3,7 +3,7 @@ import { registerCityPack } from '../src/data/pois';
 import chongqing from '../data/city-packs/重庆.json';
 import { makeOutline } from '../src/agent/outline';
 import { scheduleDays } from '../src/agent/schedule';
-import { applyBudget } from '../src/agent/budget';
+import { applyBudget, setBudget, totalSpend } from '../src/agent/budget';
 import type { Meta } from '../src/domain/schema';
 
 const pack = chongqing as unknown as { city: Parameters<typeof registerCityPack>[0]; pois: Parameters<typeof registerCityPack>[1] };
@@ -72,5 +72,42 @@ describe('BUDGET > 预算要花完，意愿要当真', () => {
     expect(spent).toBeLessThanOrEqual(meta.budget.amount);
     expect(days[0].lodging?.cost.amount ?? 0).toBeGreaterThan(before);
     expect(days[0].lodging?.name ?? '').toContain('行政楼层');
+  });
+});
+
+describe('BUDGET > 手动改预算档位', () => {
+  function budgetedDays() {
+    const meta = makeMeta();
+    const outline = makeOutline(meta);
+    const sched = scheduleDays(meta, outline.plans, outline.research);
+    applyBudget(meta, sched.days);
+    return { meta, days: sched.days };
+  }
+
+  it('升档：预算调大后重新升住宿，仍不超新预算', () => {
+    const { meta, days } = budgetedDays();
+    const before = totalSpend(days).total;
+    const res = setBudget(meta, days, 9000);
+    expect(res.spent).toBeGreaterThan(before);
+    expect(res.spent).toBeLessThanOrEqual(9000);
+    expect(meta.budget.amount).toBe(9000);
+  });
+
+  it('降档：住宿让出多出来的钱，摘掉「行政楼层」，不超新预算', () => {
+    const { meta, days } = budgetedDays();
+    const res = setBudget(meta, days, 4000);
+    const { total } = totalSpend(days);
+    expect(total).toBeLessThanOrEqual(4000);
+    expect(days[0].lodging?.name ?? '').not.toContain('行政楼层');
+    expect(res.notes.join('；')).toContain('预算下调');
+  });
+
+  it('砍到连票饭钱都盖不住：明说超支，不动既成开销', () => {
+    const { meta, days } = budgetedDays();
+    const { other } = totalSpend(days);
+    const res = setBudget(meta, days, Math.floor(other * 0.5));
+    expect(res.notes.join('；')).toContain('盖不住');
+    // 餐饮门票没被偷偷删掉
+    expect(totalSpend(days).other).toBe(other);
   });
 });

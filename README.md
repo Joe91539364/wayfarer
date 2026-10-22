@@ -14,7 +14,7 @@ npm install
 npm run crawl    # 先抓一轮（产出 public/catalog.json + official.json）
 npm run serve    # http://127.0.0.1:8787  静态站 + 爬虫 API，页面里可一键抓
 npm run dev      # http://127.0.0.1:5273  纯前端开发（读同一份 catalog.json）
-npm test         # 94 个单测
+npm test         # 104 个单测
 npm run eval     # 生成 eval-report.md（20 条用例）
 npm run build    # 产物在 dist/，同时生成可双击的 dist/standalone.html
 ```
@@ -85,6 +85,22 @@ powershell -ExecutionPolicy Bypass -File scripts\uninstall-autostart.ps1   # 撤
 风光」，就一条条对账——美食几项、自然风光几项、每天几顿正餐，说了没落实的直接标红并
 提示从候选池补。配套两条铁律焊死在修复器里：**节奏超限只删景点不删饭**，**晚饭落在
 回城方向不算「离片区太远」**。
+
+**预算可以手动换档**：右栏预算面板底下三个按钮——节俭（当前 ×0.7）/ 舒适（当前）/ 宽裕
+（当前 ×1.5），外加一个自定义金额框。点了立刻重新落地（`setBudget`）：升档继续把钱堆到住宿；
+降档让住宿把多出来的部分让出来、摘掉「行政楼层」；砍到连已定的门票餐费都盖不住就直说
+「盖不住，试试砍预算推演」，绝不偷偷删你的饭。
+
+## 自己加个地方：空档补点
+
+时间轴里凡是空出 ≥45 分钟的地方都会长出一条虚线提示——「17:30 之后空着 3 小时 30 分加点
+什么」（`src/domain/gaps.ts`）。点它打开「自己加个地方」（`AddPlaceModal`）：
+
+- 先翻本城城市包（`searchPois` 匹配名字 / 区域 / 类目词），已经排进去的不再列；
+- 城市包里没有的（某家小店、小众景点），直接打高德关键字检索现场补（`/api/places/search`），
+  结果标「现搜」，不写进城市包缓存；
+- 选好天、点 +，就插进那条空档里（`insertCandidate` 指定位置），通勤与时间重算、整体重新
+  校验，插完弹一句「已加进第 N 天，16:16-17:31」。
 
 ## 吃什么：餐饮推荐
 
@@ -417,7 +433,7 @@ Key 只在 Node 侧用，不进页面、不进构建产物。前端只会拿到 
 
 ```
 src/
-├── domain/      schema(Zod) / time / geo / summary / coverage(意愿落实) / live / palette / alerts / taxi / intercity
+├── domain/      schema(Zod) / time / geo / summary / coverage(意愿落实) / gaps(空档) / live / palette / alerts / taxi / intercity
 ├── verifier/    rules.ts（8 条纯函数）+ index.ts（凭证构造）
 ├── agent/       intake / research / outline / schedule / budget(预算落地) / repair / reflow / whatif / importer / orchestrator / llm
 ├── providers/   weather.ts（模拟，可替换为 Open-Meteo）
@@ -475,7 +491,7 @@ docs/            plan-v3.md（规划书 v3.0 源文件）
 
 `npm run eval` 会跑 20 条用例（完整 / 残缺 / 冲突 / 修改 / 对抗 五组），输出 `eval-report.md`。
 
-当前结果：通过率 100%，首次通过率 95%，POI 有效率 100%，94 个单测全绿。
+当前结果：通过率 100%，首次通过率 95%，POI 有效率 100%，104 个单测全绿。
 
 ## Obsidian Agent 运行全景
 

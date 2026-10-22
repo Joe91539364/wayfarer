@@ -6857,3 +6857,266 @@ html {
     opacity: 0.25;
   }
 }
+
+/* ---------------------- 空档提示：这里还能加点什么 ---------------------- */
+
+.slot-row {
+  display: grid;
+  grid-template-columns: 54px 18px 1fr;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0;
+}
+
+.rail-dot.slot {
+  width: 7px;
+  height: 7px;
+  border: 1px dashed var(--ink-4);
+  background: transparent;
+}
+
+.slot-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.16s;
+}
+
+.slot-add:hover {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.slot-add em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 10.5px;
+  opacity: 0.75;
+}
+
+/* ---------------------- 自己加个地方 ---------------------- */
+
+.modal.add-place-modal {
+  width: min(620px, 100%);
+}
+
+.add-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--paper-2);
+  color: var(--ink-3);
+}
+
+.add-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.add-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 4px;
+  flex-wrap: wrap;
+}
+
+.add-day-chips {
+  display: flex;
+  gap: 5px;
+}
+
+.add-err {
+  margin-top: 8px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 11.5px;
+}
+
+.add-list {
+  margin-top: 8px;
+  display: grid;
+  gap: 5px;
+  max-height: 46vh;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.add-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--paper-2);
+  text-align: left;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.add-row:hover {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.add-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.add-name {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.add-tag {
+  font-size: 9.5px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.add-sub {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.add-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: var(--paper-3);
+  color: var(--ink-2);
+  flex: none;
+}
+
+.add-row:hover .add-plus {
+  background: var(--teal);
+  color: #fff;
+}
+
+.add-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 12px;
+  border-radius: 11px;
+  background: var(--paper-3);
+  color: var(--ink-3);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* ---------------------- 预算档位按钮 ---------------------- */
+
+.tier-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.tier-cap {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  flex: none;
+}
+
+.tier-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 4px 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-2);
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.tier-btn i {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 450;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.tier-btn:hover:not(:disabled) {
+  border-color: var(--teal);
+  color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.tier-btn.on {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.tier-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tier-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tier-custom input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 11.5px;
+  background: #fff;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.tier-custom input:focus {
+  border-color: var(--teal);
+}

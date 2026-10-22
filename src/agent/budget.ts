@@ -74,3 +74,44 @@ export function applyBudget(meta: Meta, days: Day[]): BudgetResult {
 
   return { days, notes, spent: total, budget };
 }
+
+/**
+ * 手动改预算（右栏预算档位按钮）：改完立刻重新落地这笔钱。
+ *
+ * 升——多余的预算照 applyBudget 的规矩升档住宿；
+ * 降——先让住宿把多出来的部分让出来（降档、摘掉「行政楼层」），
+ *     其他开销（门票/餐厅）是既成事实不动；砍到连已花的都盖不住就明说超支。
+ */
+export function setBudget(meta: Meta, days: Day[], amount: number): BudgetResult {
+  const notes: string[] = [];
+  const old = meta.budget.amount;
+  meta.budget = { ...meta.budget, amount };
+  const rooms = Math.max(1, Math.ceil(meta.travelers.adults / 2));
+  const nights = days.length;
+
+  if (amount < old) {
+    const { lodging, other } = totalSpend(days);
+    if (other > amount) {
+      notes.push(`光门票餐饮就要 ${cnMoney(other)}，${cnMoney(amount)} 盖不住 —— 试试「砍预算」推演删减`);
+    } else if (nights > 0 && lodging > 0) {
+      const targetLodging = amount - other;
+      const perNight = Math.max(0, Math.floor(targetLodging / nights / rooms / 10) * 10);
+      const cur = (days.find((d) => d.lodging)?.lodging?.cost.amount ?? 0) / rooms;
+      if (perNight < cur) {
+        for (const d of days) {
+          if (!d.lodging) continue;
+          d.lodging = {
+            ...d.lodging,
+            name: d.lodging.name.replace(/（行政楼层）$/, ''),
+            cost: { amount: perNight * rooms, currency: 'CNY', type: 'lodging' },
+          };
+          recomputeDaySummary(d);
+        }
+        notes.push(`预算下调，住宿调到 ${cnMoney(perNight)}/晚`);
+      }
+    }
+  }
+
+  const res = applyBudget(meta, days);
+  return { days, notes: [...notes, ...res.notes], spent: totalSpend(days).total, budget: amount };
+}
