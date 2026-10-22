@@ -237,7 +237,11 @@ const fixGeo = (threshold: number): FixPass => (itin) => {
         lat: pts.reduce((s, p) => s + p.lat, 0) / pts.length,
         lng: pts.reduce((s, p) => s + p.lng, 0) / pts.length,
       };
-      const far = [...pts].filter((p) => !p.locked).sort((a, b) => roadKm(center, b) - roadKm(center, a))[0];
+      // 一顿饭「远」是有意的：郊区没店时晚饭本来就落在回城/酒店方向，
+      // 把它当「离片区太远」删掉，用户这天就没晚饭了
+      const far = [...pts]
+        .filter((p) => !p.locked && p.type !== 'meal')
+        .sort((a, b) => roadKm(center, b) - roadKm(center, a))[0];
       if (!far) break;
       const res = removeItem(cur, far.id, `离当天片区太远（>${threshold}km）`);
       if (!res.removed) break;
@@ -263,9 +267,11 @@ const fixPace: FixPass = (itin) => {
       (d) => d.summary.active_min > pace.max_active_min_per_day || d.summary.poi_count > pace.max_poi_per_day,
     );
     if (!day) break;
+    // 只删景点，不动饭：晚饭是刚需，为压一条「节奏偏满」的提醒把晚饭删了，
+    // 用户就饿着肚子看行程 —— 宁可留着这条提醒
     const candidate = [...day.items]
       .reverse()
-      .find((i) => (i.type === 'activity' || i.type === 'meal') && !i.locked && i.poi_id);
+      .find((i) => i.type === 'activity' && !i.locked && i.poi_id);
     if (!candidate) break;
     const res = removeItem(cur, candidate.id, '超出当天节奏上限');
     if (!res.removed) break;

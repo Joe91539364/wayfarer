@@ -2,6 +2,7 @@ import type { Itinerary, Meta } from '../domain/schema';
 import { dateList } from '../domain/time';
 import { makeOutline } from './outline';
 import { scheduleDays } from './schedule';
+import { applyBudget } from './budget';
 import { intake, type IntakeResult } from './intake';
 import { repair, type RepairResult } from './repair';
 import { simulatedWeather } from '../providers/weather';
@@ -124,6 +125,16 @@ export async function runAgent(
     status: 'done',
     message: `时间由程序累加，已生成 ${scheduled.days.reduce((s, d) => s + d.items.length, 0)} 个条目`,
     detail: `${scheduled.unscheduled.length} 个备选进入候选池`,
+  });
+
+  emit({ stage: 'schedule', status: 'start', message: '预算落地：升档住宿与用餐' });
+  const budgeted = applyBudget(meta, scheduled.days);
+  await sleep(tick);
+  emit({
+    stage: 'schedule',
+    status: 'done',
+    message: `预算已安排 ${Math.round((budgeted.spent / meta.budget.amount) * 100)}%`,
+    detail: budgeted.notes.join('；') || '按预算安排',
   });
 
   const ctx = buildContext(meta);

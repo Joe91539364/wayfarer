@@ -44,7 +44,9 @@ export function buildPoiPool(meta: Meta): ResearchResult {
     for (const tag of seed.tags) {
       const w = INTEREST_WEIGHT[tag] ?? 0.6;
       if (interests.includes(tag)) {
-        score += 2.2 * w;
+        // 意愿分要压过评分差：用户点名「喜欢吃」，一个 4.8 的火锅店
+        // 就该排在 4.9 的寺庙前面，而不是当陪跑
+        score += 3.4 * w;
         reasons.push(`匹配偏好「${tag}」`);
       }
     }
@@ -57,7 +59,8 @@ export function buildPoiPool(meta: Meta): ResearchResult {
       reasons.push('命中避雷清单');
     }
     if (seed.category === 'restaurant' || seed.category === 'cafe') {
-      score -= 1.2;
+      // 说了想吃好的，餐厅就是正主；没提吃才把它往后压（正餐反正会单独插）
+      score += interests.includes('food') ? 1.6 : -1.2;
     }
     if (seed.hours_confidence === 'verified') score += 0.3;
 

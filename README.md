@@ -14,7 +14,7 @@ npm install
 npm run crawl    # 先抓一轮（产出 public/catalog.json + official.json）
 npm run serve    # http://127.0.0.1:8787  静态站 + 爬虫 API，页面里可一键抓
 npm run dev      # http://127.0.0.1:5273  纯前端开发（读同一份 catalog.json）
-npm test         # 84 个单测
+npm test         # 94 个单测
 npm run eval     # 生成 eval-report.md（20 条用例）
 npm run build    # 产物在 dist/，同时生成可双击的 dist/standalone.html
 ```
@@ -72,6 +72,19 @@ powershell -ExecutionPolicy Bypass -File scripts\uninstall-autostart.ps1   # 撤
 | 高德地图 | 驾车路线（起终点坐标预填） |
 
 「复制行程」把行程摘要放剪贴板，粘到任何 App 里都能用。
+
+## 预算要花完，意愿要当真
+
+给 ¥6,000 就该过 ¥6,000 的日子，而不是行程排完剩一句「余 ¥4,740」。排程之后有一道
+**预算落地**（`src/agent/budget.ts`）：餐饮按预算的 40% 摊到每一顿（说了想吃好的就按
+「这顿该花多少」挑店，不挑最近的沙县），剩余的钱大头升档住宿（行政楼层，绝不超预算），
+留一小笔当机动。重庆 3 天 2 人 ¥6,000 的实测：利用率从 31% 提到 80%+，每天 2-3 顿正经
+餐厅且跨天不重样，住宿从 ¥300 升到 ¥1,000+/晚。
+
+右栏新增「**意愿落实**」面板（`src/domain/coverage.ts`）：你在需求里点过「美食 / 自然
+风光」，就一条条对账——美食几项、自然风光几项、每天几顿正餐，说了没落实的直接标红并
+提示从候选池补。配套两条铁律焊死在修复器里：**节奏超限只删景点不删饭**，**晚饭落在
+回城方向不算「离片区太远」**。
 
 ## 吃什么：餐饮推荐
 
@@ -404,9 +417,9 @@ Key 只在 Node 侧用，不进页面、不进构建产物。前端只会拿到 
 
 ```
 src/
-├── domain/      schema(Zod) / time / geo / summary / live / palette / alerts / taxi / intercity
+├── domain/      schema(Zod) / time / geo / summary / coverage(意愿落实) / live / palette / alerts / taxi / intercity
 ├── verifier/    rules.ts（8 条纯函数）+ index.ts（凭证构造）
-├── agent/       intake / research / outline / schedule / repair / reflow / whatif / importer / orchestrator / llm
+├── agent/       intake / research / outline / schedule / budget(预算落地) / repair / reflow / whatif / importer / orchestrator / llm
 ├── providers/   weather.ts（模拟，可替换为 Open-Meteo）
 ├── data/        pois.ts（5 城内置 + 动态城市包注册）/ hotels.ts / comments.ts / official.ts /
 │                bindings.ts / catalog.ts（爬虫产物契约 + 平台登记表）/ citypack.ts（客户端城市包）
@@ -462,7 +475,7 @@ docs/            plan-v3.md（规划书 v3.0 源文件）
 
 `npm run eval` 会跑 20 条用例（完整 / 残缺 / 冲突 / 修改 / 对抗 五组），输出 `eval-report.md`。
 
-当前结果：通过率 100%，首次通过率 95%，POI 有效率 100%，84 个单测全绿。
+当前结果：通过率 100%，首次通过率 95%，POI 有效率 100%，94 个单测全绿。
 
 ## Obsidian Agent 运行全景
 

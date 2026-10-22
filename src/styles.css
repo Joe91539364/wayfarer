@@ -1316,6 +1316,162 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
+/* 预算去向：一行一类，条形对齐金额 */
+.spend-rows {
+  display: grid;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.spend-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 54px 32px;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.spend-name {
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+
+.spend-track {
+  height: 5px;
+  border-radius: 4px;
+  background: var(--paper-3);
+  overflow: hidden;
+}
+
+.spend-track i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--ink-4);
+  transition: width 0.4s ease;
+}
+
+.spend-row.lodging .spend-track i {
+  background: linear-gradient(90deg, var(--teal), #4f8a7d);
+}
+
+.spend-row.meal .spend-track i {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+.spend-row.ticket .spend-track i {
+  background: linear-gradient(90deg, var(--amber), #c29a45);
+}
+
+.spend-row.transit .spend-track i {
+  background: linear-gradient(90deg, #7c8b86, #a3b1ac);
+}
+
+.spend-amt {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.spend-pct {
+  text-align: right;
+  font-size: 10px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.budget-foot .over-text {
+  color: var(--red);
+}
+
+/* 意愿落实：说过的兴趣逐条对账 */
+.want-list {
+  display: grid;
+  gap: 3px;
+}
+
+.want-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'label count' 'samples samples';
+  align-items: baseline;
+  gap: 1px 8px;
+  padding: 4px 7px;
+  border-radius: 8px;
+}
+
+.want-row.want {
+  background: var(--paper-3);
+}
+
+.want-row.miss {
+  background: var(--red-soft);
+}
+
+.want-label {
+  grid-area: label;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.want-row.want .want-label {
+  color: var(--ink);
+  font-weight: 550;
+}
+
+.want-label em {
+  font-style: normal;
+  font-size: 9.5px;
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.want-count {
+  grid-area: count;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.want-row.miss .want-count {
+  color: var(--red);
+}
+
+.want-samples {
+  grid-area: samples;
+  font-size: 10px;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.want-warn {
+  margin-top: 7px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+
 /* ------------------------------- pool ------------------------------- */
 
 .pool {

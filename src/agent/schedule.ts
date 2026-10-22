@@ -72,14 +72,27 @@ export function scheduleDays(meta: Meta, plans: DayPlan[], research: ResearchRes
   const lodging = lodgingOverride ?? pickLodging(meta.city_code);
   const all = poisByCity(meta.city_code);
   const byId = new Map(all.map((p) => [p.poi_id, p]));
-  const restaurants = all.filter((p) => p.category === 'restaurant' || p.category === 'cafe');
+  const dining = all.filter((p) => p.category === 'restaurant' || p.category === 'cafe');
+  // 正餐只认真正的餐厅：咖啡店再近再高分也不能当午饭晚饭 —— 用户说过「想吃好吃的」
+  const restaurants = dining.filter((p) => p.category !== 'cafe');
+  const cafes = dining.filter((p) => p.category === 'cafe');
   const cap = PACES[meta.pace].max_active_min_per_day;
   const factor = PACE_DURATION_FACTOR[meta.pace];
   const adults = meta.travelers.adults;
   const rooms = Math.max(1, Math.ceil(adults / 2));
+  // 预算宽裕（人均每天 ≥ ¥300）：3km 以上的公共交通升级打车，把预算花在舒适上。
+  // 这笔钱本来就是「余出来没处花」的，与其躺着不如少挤两趟地铁。
+  const comfort = meta.budget.amount / Math.max(1, plans.length * adults) >= 250;
+  const pickModeFor = (km: number) => {
+    const mode = pickMode(km);
+    // 预算宽裕时 1.2km 以上的市内移动都打车（城际火车除外）—— 少走路，多玩
+    return comfort && km >= 1.2 && mode !== 'train' ? 'taxi' : mode;
+  };
   const unscheduled: Candidate[] = [];
   const skipped: { poi_id: string; name: string; reason: string }[] = [];
   const days: Day[] = [];
+  // 跨天去重：三天午饭都吃同一家火锅，再好吃也腻
+  const usedRestaurants = new Set<string>();
 
   plans.forEach((plan, planIdx) => {
     const items: ItineraryItem[] = [];
@@ -91,7 +104,6 @@ export function scheduleDays(meta: Meta, plans: DayPlan[], research: ResearchRes
     let poiCount = 0;
     let lunchDone = false;
     let dinnerDone = false;
-    const usedRestaurants = new Set<string>();
 
     const seeds = plan.poi_ids
       .map((id) => byId.get(id))
@@ -108,7 +120,7 @@ export function scheduleDays(meta: Meta, plans: DayPlan[], research: ResearchRes
 
     const pushTransit = (from: LatLng & { name: string }, to: LatLng & { name: string }, departMin: number) => {
       const km = roadKm(from, to);
-      const mode = pickMode(km);
+      const mode = pickModeFor(km);
       const mins = estimateTransitMinutes(km, mode);
       items.push({
         id: `d${plan.day_index}-t${tseq++}`,
@@ -136,13 +148,20 @@ export function scheduleDays(meta: Meta, plans: DayPlan[], research: ResearchRes
       return mins;
     };
 
-    const pickRestaurant = (at: LatLng, clock: number, meal: 'lunch' | 'dinner'): PoiSeed | null => {
+    // 这趟饭的钱怎么花：餐饮按总预算的 32% 摊到每一顿（晚餐 ×1.25），
+    // 选「人均最接近目标」且评分高的店 —— 说了想吃好的，就别排最近的一家沙县。
+    const mealTarget = Math.max(30, Math.round((meta.budget.amount * 0.40) / Math.max(1, plans.length * 3 * adults)));
+    const pickRestaurant = (at: LatLng, clock: number, meal: 'lunch' | 'dinner', maxKm = 5): PoiSeed | null => {
       const dur = meal === 'lunch' ? 60 : 75;
       const windowStart = meal === 'lunch' ? toMin('11:00') : toMin('17:00');
       const windowEnd = meal === 'lunch' ? toMin('14:30') : toMin('21:30');
-      if (clock < windowStart || clock > windowEnd) return null;
+      // 晚饭有个硬底线：玩到 22:30 也得吃饭，只是不再挑挑拣拣
+      if (clock < windowStart || clock > toMin('22:30')) return null;
+      const late = clock > windowEnd;
+      const target = mealTarget * (meal === 'dinner' ? 1.25 : 1);
       const candidates = restaurants
         .filter((r) => !usedRestaurants.has(r.poi_id))
+        .filter((r) => haversine(at, { lat: r.lat, lng: r.lng }) <= maxKm)
         .filter((r) => {
           const o = toMin(r.open);
           const c = toMin(r.close);
@@ -150,16 +169,69 @@ export function scheduleDays(meta: Meta, plans: DayPlan[], research: ResearchRes
           // 必须按真实用餐时长校验，否则「差 45 分钟打烊」的店会被排进去然后判 error
           return clock >= o && clock + dur <= closeMin;
         })
-        .map((r) => ({ r, d: haversine(at, { lat: r.lat, lng: r.lng }) }))
-        .sort((a, b) => a.d - b.d);
+        .map((r) => {
+          const d = haversine(at, { lat: r.lat, lng: r.lng });
+          // 人均越接近「这顿该花的钱」越好；¥0 的脏数据（酒店餐厅挂成餐厅）天然垫底
+          const priceFit = r.price <= 0 ? 0 : 1 - Math.min(1, Math.abs(r.price - target) / target);
+          const hotelish = /酒店|宾馆/.test(r.name) ? -2.5 : 0;
+          const score = r.rating * 1.6 + priceFit * 3.4 - Math.min(d, 6) * 0.35 + hotelish - (late ? 1 : 0);
+          return { r, d, score };
+        })
+        .sort((a, b) => b.score - a.score);
       return candidates[0]?.r ?? null;
     };
 
-    const insertMeal = (meal: 'lunch' | 'dinner') => {
-      const want = meal === 'lunch' ? Math.max(cursor, toMin('11:30')) : Math.max(cursor, toMin('17:30'));
-      const r = pickRestaurant(prev, want, meal);
+    const insertCafe = (): boolean => {
+      const dur = 45;
+      if (cursor < toMin('13:30') || cursor > toMin('16:45')) return false;
+      const nearby = cafes.filter((r) => !usedRestaurants.has(r.poi_id) && haversine(prev, { lat: r.lat, lng: r.lng }) <= 3.5);
+      const candidates = nearby
+        .filter((r) => {
+          const o = toMin(r.open);
+          const c = toMin(r.close);
+          const closeMin = c < o ? c + 1440 : c;
+          return cursor >= o && cursor + dur <= closeMin;
+        })
+        .map((r) => {
+          const d = haversine(prev, { lat: r.lat, lng: r.lng });
+          const priceFit = r.price <= 0 ? 0 : 1 - Math.min(1, Math.abs(r.price - mealTarget * 0.6) / (mealTarget * 0.6));
+          return { r, score: r.rating * 1.8 + priceFit * 2.6 - Math.min(d, 5) * 0.4 };
+        })
+        .sort((a, b) => b.score - a.score);
+      const r = candidates[0]?.r;
       if (!r) return false;
-      const travel = estimateTransitMinutes(roadKm(prev, r), pickMode(roadKm(prev, r)));
+      const km = roadKm(prev, r);
+      const travel = estimateTransitMinutes(km, pickModeFor(km));
+      // 喝完得留出晚饭窗口（17:30 起），否则这杯咖啡侵吞晚餐
+      if (cursor + travel + dur > toMin('17:15')) return false;
+      pushTransit(prev, { lat: r.lat, lng: r.lng, name: r.name }, cursor);
+      const start = cursor + travel;
+      items.push({
+        id: `d${plan.day_index}-i${seq++}`,
+        type: 'meal',
+        ...toItemBase(r, adults),
+        start_time: fromMin(start),
+        end_time: fromMin(start + dur),
+        duration_min: dur,
+        cost: money((r.price > 0 ? r.price : Math.round(mealTarget * 0.7)) * adults, 'meal'),
+      } as ItineraryItem);
+      usedRestaurants.add(r.poi_id);
+      cursor = start + dur;
+      activityMin += travel + dur;
+      prev = { lat: r.lat, lng: r.lng, name: r.name };
+      return true;
+    };
+
+    /**
+     * 插一顿饭。anchor 用来处理「郊区数据荒漠」：大学城/展馆周边一家餐厅都没有时，
+     * 晚饭就落在酒店附近 —— 反正总得回去，回酒店楼下吃比空着这天好。
+     */
+    const insertMeal = (meal: 'lunch' | 'dinner', maxKm = 5, anchor?: LatLng) => {
+      const from = anchor ?? prev;
+      const want = meal === 'lunch' ? Math.max(cursor, toMin('11:30')) : Math.max(cursor, toMin('17:30'));
+      const r = pickRestaurant(from, want, meal, maxKm);
+      if (!r) return false;
+      const travel = estimateTransitMinutes(roadKm(prev, r), pickModeFor(roadKm(prev, r)));
       const start = want + travel;
       const dur = meal === 'lunch' ? 60 : 75;
       // 加上通勤后可能已经打烊，宁可不排这家
@@ -175,7 +247,7 @@ export function scheduleDays(meta: Meta, plans: DayPlan[], research: ResearchRes
         start_time: fromMin(start),
         end_time: fromMin(start + dur),
         duration_min: dur,
-        cost: money(r.price * adults, 'meal'),
+        cost: money((r.price > 0 ? r.price : Math.round(mealTarget * 0.7)) * adults, 'meal'),
       } as ItineraryItem);
       usedRestaurants.add(r.poi_id);
       cursor = start + dur;
@@ -191,6 +263,10 @@ export function scheduleDays(meta: Meta, plans: DayPlan[], research: ResearchRes
 
       if (!lunchDone && cursor >= toMin('11:20') && cursor <= toMin('14:00')) {
         if (insertMeal('lunch')) lunchDone = true;
+      }
+      // 晚上那场之前必须把晚饭解决：夜景观完 22 点再找饭，好店全打烊了
+      if (!dinnerDone && cursor >= toMin('16:30') && toMin(seed.open) >= toMin('17:00')) {
+        if (insertMeal('dinner')) dinnerDone = true;
       }
 
       // 通勤必须在插入午餐之后计算：午餐会改变出发点
@@ -235,10 +311,32 @@ export function scheduleDays(meta: Meta, plans: DayPlan[], research: ResearchRes
     }
 
     if (!lunchDone) {
-      if (insertMeal('lunch')) lunchDone = true;
+      // 数据荒漠里 5km 一家店都没有：逐级放宽半径，14km 内总有一家能吃的
+      for (const km of [5, 9, 14]) {
+        if (insertMeal('lunch', km)) {
+          lunchDone = true;
+          break;
+        }
+      }
     }
-    if (!dinnerDone && cursor >= toMin('16:30')) {
-      if (insertMeal('dinner')) dinnerDone = true;
+    // 说了想吃好的且预算宽裕：收工早就插一间高分咖啡馆当下午茶，把下午的空档填上
+    if (meta.interests.includes('food') && comfort) {
+      insertCafe();
+    }
+    // 晚饭是刚需，不是「玩到 16:30 才顺路吃」的optional项：
+    // 一天玩得再早收工，17:30 也得开饭（insertMeal 内部会把 want 抬到 17:30）；
+    // 玩到郊区（展馆/山里）附近没店时，半径放宽到 14km —— 回城路上那顿也算数
+    if (!dinnerDone) {
+      for (const km of [5, 9, 14]) {
+        if (insertMeal('dinner', km)) {
+          dinnerDone = true;
+          break;
+        }
+      }
+    }
+    // 最后一招：人还在荒漠里但今晚要回酒店，那就回酒店附近吃，别让这天没晚饭
+    if (!dinnerDone) {
+      insertMeal('dinner', 6, { lat: lodging.lat, lng: lodging.lng });
     }
 
     const day: Day = {

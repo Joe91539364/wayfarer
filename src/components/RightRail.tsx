@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Candidate, Itinerary } from '../domain/schema';
 import { CATEGORY_CN } from '../domain/schema';
-import { cnMoney } from '../domain/summary';
+import { cnMoney, costBreakdown } from '../domain/summary';
+import { interestCoverage, mealPerDay, unmetInterests } from '../domain/coverage';
 import { totalOf, type WhatIfKind, type WhatIfResult } from '../agent/whatif';
 import CertificateCard from './Certificate';
 import MapView from './MapView';
@@ -62,8 +63,17 @@ export default function RightRail(props: Props) {
   const total = totalOf(itinerary);
   const budget = itinerary.meta.budget.amount;
   const ratio = Math.min(1, total / Math.max(1, budget));
-  const breakdown = itinerary.feasibility?.evidence.cost_breakdown ?? {};
+  const breakdown = useMemo(() => costBreakdown(itinerary), [itinerary]);
   const TYPE_CN: Record<string, string> = { lodging: '住宿', meal: '餐饮', ticket: '门票', transit: '交通', other: '其他' };
+  const spendRows = Object.entries(breakdown)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const coverage = useMemo(() => interestCoverage(itinerary), [itinerary]);
+  const unmet = unmetInterests(coverage);
+  const wants = coverage.filter((r) => r.want);
+  const meals = useMemo(() => mealPerDay(itinerary), [itinerary]);
+  const avgMeals = meals.length ? meals.reduce((s, m) => s + m.meals, 0) / meals.length : 0;
+  const upgraded = /行政楼层/.test(itinerary.days[0]?.lodging?.name ?? '');
 
   return (
     <div>
@@ -82,7 +92,7 @@ export default function RightRail(props: Props) {
       <div className="panel">
         <div className="panel-head">
           <div className="panel-title">预算</div>
-          <span className="tiny muted">{total > budget ? '已超支' : `余 ${cnMoney(budget - total)}`}</span>
+          <span className="tiny muted">{total > budget ? '已超支' : `${Math.round(ratio * 100)}% 已安排`}</span>
         </div>
         <div className="panel-body">
           <div className="budget-total">
@@ -92,20 +102,62 @@ export default function RightRail(props: Props) {
           <div className={`bar ${total > budget ? 'over' : ''}`}>
             <i style={{ width: `${ratio * 100}%` }} />
           </div>
-          <div className="breakdown">
-            {Object.entries(breakdown)
-              .sort((a, b) => b[1] - a[1])
-              .map(([k, v]) => (
-                <span key={k}>
-                  {TYPE_CN[k] ?? k} {cnMoney(v)}
+          <div className="spend-rows">
+            {spendRows.map(([k, v]) => (
+              <div className={`spend-row ${k}`} key={k}>
+                <span className="spend-name">{TYPE_CN[k] ?? k}</span>
+                <span className="spend-track">
+                  <i style={{ width: `${Math.min(100, (v / Math.max(1, total)) * 100)}%` }} />
                 </span>
-              ))}
+                <span className="spend-amt">{cnMoney(v)}</span>
+                <span className="spend-pct">{Math.round((v / Math.max(1, total)) * 100)}%</span>
+              </div>
+            ))}
           </div>
-          <div className="tiny muted" style={{ marginTop: 8 }}>
+          <div className="budget-foot">
+            {total > budget ? (
+              <span className="over-text">超了 {cnMoney(total - budget)}，可用「砍预算」推演</span>
+            ) : (
+              <span>留 {cnMoney(budget - total)} 机动（购物、临时加项）</span>
+            )}
+            {upgraded && <span className="chip accent">住宿已升档</span>}
+          </div>
+          <div className="tiny muted" style={{ marginTop: 6 }}>
             住宿 {cnMoney((itinerary.days[0]?.lodging?.cost.amount ?? 0) * itinerary.days.length)} · 已含每日房费
           </div>
         </div>
       </div>
+
+      <div className="panel">
+        <div className="panel-head">
+          <div className="panel-title">意愿落实</div>
+          <span className="tiny muted">
+            {wants.length === 0 ? '你没特别点名' : `${wants.filter((r) => r.enough).length}/${wants.length} 项有着落`}
+          </span>
+        </div>
+        <div className="panel-body">
+          <div className="want-list">
+            {coverage.map((r) => (
+              <div className={`want-row${r.want ? ' want' : ''}${r.want && !r.enough ? ' miss' : ''}`} key={r.key}>
+                <span className="want-label">
+                  {r.label}
+                  {r.want && <em>你要的</em>}
+                </span>
+                <b className="want-count">{r.count}</b>
+                <span className="want-samples">{r.samples.join('·') || '—'}</span>
+              </div>
+            ))}
+          </div>
+          {unmet.length > 0 && (
+            <div className="want-warn">「{unmet.map((r) => r.label).join('、')}」没排够 —— 从候选池点 + 补一个</div>
+          )}
+          <div className="tiny muted" style={{ marginTop: 6 }}>
+            平均每天 {avgMeals.toFixed(1)} 顿正餐
+            {meals.length > 0 && ` · ${meals.map((m) => `D${m.day}×${m.meals}`).join(' ')}`}
+          </div>
+        </div>
+      </div>
+
 
       <div className="panel">
         <div className="panel-head">

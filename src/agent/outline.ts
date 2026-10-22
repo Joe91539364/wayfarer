@@ -135,6 +135,21 @@ export function makeOutline(meta: Meta): OutlineResult {
       }
     }
     const area = picked.length > 0 ? picked[0].seed.area : cityOf(meta.city_code).lodging.area;
+    // 数据稀疏的片区（大学城、郊区）一天只剩两个点，13 点就没事干了：
+    // 就近补到 3 个（12km 内），宁可多坐几站地铁，也别让用户下午躺在酒店。
+    if (picked.length < 3) {
+      const fillers = inCity
+        .filter((p) => !used.has(p.seed.poi_id))
+        .filter((p) => !research.closedOn[p.seed.poi_id]?.includes(dates[i]))
+        .map((p) => ({ p, d: haversine(p.seed, refCenter) }))
+        .filter((x) => x.d <= 12)
+        .sort((a, b) => a.d - b.d);
+      for (const { p } of fillers) {
+        if (picked.length >= Math.min(3, perDay)) break;
+        picked.push(p);
+        used.add(p.seed.poi_id);
+      }
+    }
     plans.push({
       date: dates[i],
       day_index: i + 1,
