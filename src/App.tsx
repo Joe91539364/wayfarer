@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Candidate, Itinerary, Meta } from './domain/schema';
 import { CATEGORY_CN, INTEREST_CN, PACES } from './domain/schema';
 import { reflowDay } from './agent/reflow';
+import { resolveDayEdits, type EditFix } from './agent/conflict';
 import { insertCandidate, removeItem, type RepairResult } from './agent/repair';
 import { buildContext, NeedsClarification, revalidate, runAgent, type StageEvent } from './agent/orchestrator';
 import { whatIf, type WhatIfKind, type WhatIfResult } from './agent/whatif';
-import { setBudget } from './agent/budget';
+import { changeBudget } from './agent/budget';
 import { importFromText, type ImportResult } from './agent/importer';
 import { DEFAULT_LLM, loadLlmConfig, saveLlmConfig, type LlmConfig } from './agent/llm';
 import { describeMeta, intake, type IntakeResult } from './agent/intake';
@@ -30,6 +31,7 @@ import ImportModal from './components/ImportModal';
 import PoiDetail from './components/PoiDetail';
 import SyncModal from './components/SyncModal';
 import HotelModal from './components/HotelModal';
+import EditReportBar from './components/EditReportBar';
 import AddPlaceModal from './components/AddPlaceModal';
 import RouteRibbon, { clockFromSlider } from './components/RouteRibbon';
 import LoginModal from './components/LoginModal';
@@ -95,6 +97,9 @@ export default function App() {
   const [hotelDay, setHotelDay] = useState<number | null>(null);
   /** 「自己加点」弹窗：哪一天、哪个空档（slot 为空表示从右栏搜） */
   const [addPlace, setAddPlace] = useState<{ dayIndex: number; slot: import('./domain/gaps').DaySlot | null } | null>(null);
+  /** 手动改完行程后的「刚才自动做了什么」+ 一步撤销 */
+  const [editReport, setEditReport] = useState<{ title: string; fixes: EditFix[] } | null>(null);
+  const undoRef = useRef<Itinerary | null>(null);
   const { now, driftMs, synced } = useNow();
   const [followReal, setFollowReal] = useState(true);
   const [seek, setSeek] = useState(0);
@@ -189,6 +194,32 @@ export default function App() {
     setIti(revalidate(next, ctx));
     setWhatIfResult(null);
   }, []);
+
+  /**
+   * 手动改完行程的统一出口：记快照（可一键撤销）→ 让 conflict.ts 收拾冲突
+   * （撞闭园、收工太晚、饭点被挤掉）→ 整体重新校验。
+   */
+  function commitManual(title: string, next: Itinerary, dayIndex?: number) {
+    undoRef.current = iti ? (JSON.parse(JSON.stringify(iti)) as Itinerary) : null;
+    let result = next;
+    let fixes: EditFix[] = [];
+    if (dayIndex != null) {
+      const r = resolveDayEdits(result, dayIndex);
+      result = r.itin;
+      fixes = r.fixes;
+    }
+    commit(result);
+    setEditReport(fixes.length ? { title, fixes } : null);
+    return { itin: result, fixes };
+  }
+
+  function undoEdit() {
+    if (!undoRef.current) return;
+    setIti(undoRef.current);
+    undoRef.current = null;
+    setEditReport(null);
+    notify('已撤销这次改动');
+  }
 
   /**
    * 就地改需求的字段继承（规则在 domain/replan.ts，可单测）：
@@ -321,13 +352,15 @@ export default function App() {
 
   function remove(id: string) {
     if (!iti) return;
+    const day = iti.days.find((d) => d.items.some((i) => i.id === id));
     const res = removeItem(iti, id, '手动移入候选池');
     if (!res.removed) {
       notify('这一项已锁定，先解锁再删除');
       return;
     }
-    commit(res.itin);
-    notify('已移入候选池');
+    const { fixes } = commitManual('已把这一项移入候选池', res.itin, day?.day_index);
+    const auto = fixes.filter((f) => f.auto).length;
+    notify(auto > 0 ? `已移入候选池，顺手补了 ${auto} 处` : '已移入候选池');
   }
 
   function move(dayIndex: number, fromId: string, toId: string) {
@@ -345,8 +378,9 @@ export default function App() {
     next.days = next.days.map((d) =>
       d.day_index === dayIndex ? reflowDay({ ...d, items: acts }, { startClock: dayIndex === 1 ? '09:30' : '08:30', lodging }) : d,
     );
-    commit(next);
-    notify('已重排，并按新顺序重算通勤与时间');
+    const { fixes } = commitManual('已重排这一天', next, dayIndex);
+    const auto = fixes.filter((f) => f.auto).length;
+    notify(auto > 0 ? `已重排，顺手处理 ${auto} 处冲突` : '已重排，通勤与时间已重算');
   }
 
   function addCandidate(c: Candidate) {
@@ -356,13 +390,20 @@ export default function App() {
     notify(`已把「${c.name}」插入第 ${activeDay} 天并重新校验`);
   }
 
-  /** 手动改预算：换档后立刻重新落地这笔钱（升档住宿 / 降档让钱） */
+  /**
+   * 手动改预算：不只是换房型 —— 升预算会加付费体验，降预算会把最贵的非必去项退回候选池，
+   * 游玩地跟着一起变，改完立刻重算并给出说明。
+   */
   function setBudgetTo(amount: number) {
     if (!iti || !Number.isFinite(amount) || amount <= 0) return;
-    const cloned = JSON.parse(JSON.stringify(iti)) as Itinerary;
-    const res = setBudget(cloned.meta, cloned.days, amount);
-    commit(cloned);
-    notify(res.notes[0] ?? `预算已改为 ${cnMoney(amount)}`);
+    undoRef.current = JSON.parse(JSON.stringify(iti)) as Itinerary;
+    const res = changeBudget(iti, amount);
+    commit(res.itin);
+    setEditReport({
+      title: `预算改到 ${cnMoney(amount)}`,
+      fixes: res.notes.map((text) => ({ code: 'budget' as const, text, auto: true })),
+    });
+    notify(res.notes.length > 1 ? `预算已改，动了 ${res.notes.length - 2 + 1} 处安排` : `预算已改为 ${cnMoney(amount)}`);
   }
 
   /** 自己加点：插到指定天的空档里，然后重排这一天，再整体重新校验 */
@@ -379,8 +420,8 @@ export default function App() {
       if (at >= 0) position = at;
     }
     const inserted = insertCandidate(iti, dayIndex - 1, c, position);
-    commit(inserted);
-    const after = inserted.days.find((d) => d.day_index === dayIndex);
+    const { itin } = commitManual(`已把「${c.name}」加进第 ${dayIndex} 天`, inserted, dayIndex);
+    const after = itin.days.find((d) => d.day_index === dayIndex);
     const placed = after?.items.filter((i) => i.type !== 'transit').find((i) => i.name === c.name);
     notify(
       placed
@@ -397,7 +438,7 @@ export default function App() {
     const pos = acts.findIndex((a) => a.id === swapFor);
     const res = removeItem(iti, swapFor, '被替换');
     const next = insertCandidate(res.itin, day.day_index - 1, c, Math.max(0, pos));
-    commit(next);
+    commitManual(`已换成「${c.name}」`, next, day.day_index);
     setSwapFor(null);
     notify(`已换成「${c.name}」`);
   }
@@ -982,6 +1023,14 @@ export default function App() {
               onToggleFollow={toggleFollow}
               onOpenItem={openItem}
             />
+            {editReport && (
+              <EditReportBar
+                title={editReport.title}
+                fixes={editReport.fixes}
+                onUndo={undoEdit}
+                onDismiss={() => setEditReport(null)}
+              />
+            )}
             <Timeline
               itinerary={iti}
               activeDay={activeDay}

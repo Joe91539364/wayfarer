@@ -78,6 +78,12 @@ export function reflowDay(day: Day, opts: ReflowOptions): Day {
     }
 
     let start = cursor + travel;
+    // 饭点是**时间锚**：重排只许把它往后推，不许提前。
+    // 否则删掉上午一个点，晚饭会被压到 13:45 —— 那不是「重算了时间」，那是把饭点弄丢了。
+    if (item.type === 'meal') {
+      const anchor = toMin(item.start_time);
+      if (start < anchor) start = anchor;
+    }
     if (item.opening_hours && item.opening_hours.confidence !== 'unknown') {
       const openMin = toMin(item.opening_hours.open);
       if (start < openMin) start = openMin;

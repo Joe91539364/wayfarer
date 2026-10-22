@@ -3,8 +3,8 @@ import { registerCityPack } from '../src/data/pois';
 import chongqing from '../data/city-packs/重庆.json';
 import { makeOutline } from '../src/agent/outline';
 import { scheduleDays } from '../src/agent/schedule';
-import { applyBudget, setBudget, totalSpend } from '../src/agent/budget';
-import type { Meta } from '../src/domain/schema';
+import { applyBudget, changeBudget, setBudget, totalSpend } from '../src/agent/budget';
+import type { Itinerary, Meta } from '../src/domain/schema';
 
 const pack = chongqing as unknown as { city: Parameters<typeof registerCityPack>[0]; pois: Parameters<typeof registerCityPack>[1] };
 registerCityPack(pack.city, pack.pois);
@@ -109,5 +109,55 @@ describe('BUDGET > 手动改预算档位', () => {
     expect(res.notes.join('；')).toContain('盖不住');
     // 餐饮门票没被偷偷删掉
     expect(totalSpend(days).other).toBe(other);
+  });
+});
+
+describe('BUDGET > 改预算也要动游玩地', () => {
+  function planned() {
+    const meta = makeMeta();
+    const outline = makeOutline(meta);
+    const sched = scheduleDays(meta, outline.plans, outline.research);
+    applyBudget(meta, sched.days);
+    const itin = {
+      id: 't',
+      version: 1,
+      parent_id: null,
+      variant_label: null,
+      created_at: '',
+      updated_at: '',
+      meta,
+      days: sched.days,
+      unscheduled: sched.unscheduled,
+      warnings: [],
+      feasibility: null,
+      assumptions: [],
+    } as unknown as Itinerary;
+    return itin;
+  }
+
+  it('升预算：钱要么变成体验、要么变成房，且不超新预算', () => {
+    const itin = planned();
+    const before = totalSpend(itin.days).total;
+    const beforeCount = itin.days.reduce((s, d) => s + d.items.filter((i) => i.type !== 'transit').length, 0);
+    const res = changeBudget(itin, 9000);
+    const after = totalSpend(res.itin.days).total;
+    const afterCount = res.itin.days.reduce((s, d) => s + d.items.filter((i) => i.type !== 'transit').length, 0);
+    expect(after).toBeLessThanOrEqual(9000);
+    // 钱变多了：要么多排点（这次是加高分景点），要么住得更贵 —— 别只剩「余额变多」
+    expect(after > before || afterCount > beforeCount).toBe(true);
+    expect(afterCount).toBeGreaterThan(beforeCount); // 门票多免费，所以走「多玩一个点」这条路
+    expect(res.notes.join('；')).toMatch(/多排了|加了/);
+    expect(res.notes[0]).toContain('预算');
+  });
+
+  it('降预算：先让住宿让钱，砍项也只砍景点、不砍饭', () => {
+    const itin = planned();
+    const mealsBefore = itin.days.reduce((s, d) => s + d.items.filter((i) => i.type === 'meal').length, 0);
+    const res = changeBudget(itin, 4000);
+    expect(totalSpend(res.itin.days).total).toBeLessThanOrEqual(4000);
+    const mealsAfter = res.itin.days.reduce((s, d) => s + d.items.filter((i) => i.type === 'meal').length, 0);
+    expect(mealsAfter).toBe(mealsBefore);
+    // 被砍掉的项回到候选池，不是凭空消失
+    expect(res.itin.unscheduled.length).toBeGreaterThanOrEqual(itin.unscheduled.length);
   });
 });

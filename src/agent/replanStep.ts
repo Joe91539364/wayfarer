@@ -44,7 +44,7 @@ function reflowFor(itin: Itinerary, dayIndex: number): Itinerary {
   return next;
 }
 
-function toCandidate(item: ItineraryItem, reason: string): Candidate {
+function toCandidate(item: ItineraryItem, reason: string, adults = 1): Candidate {
   return {
     poi_id: item.poi_id ?? item.id,
     name: item.name,
@@ -53,7 +53,7 @@ function toCandidate(item: ItineraryItem, reason: string): Candidate {
     category: item.category ?? 'sight',
     reason,
     suggested_duration_min: item.duration_min,
-    cost: item.cost,
+    cost: { ...item.cost, amount: Math.round(item.cost.amount / Math.max(1, adults)) },
     indoor: !item.weather_sensitive,
     interest_tags: [],
     rating: 0,
@@ -143,7 +143,7 @@ export function replanStep(
 
   // 换到第 N 天
   if (dayNo >= 1 && dayNo <= itin.days.length && dayNo !== day.day_index && /(换到|移到|放到|挪到|改到)/.test(t)) {
-    const cand = toCandidate(item, '从其他天移入');
+    const cand = toCandidate(item, '从其他天移入', itin.meta.travelers.adults);
     const removed = removeItem(itin, itemId, '移出原计划');
     const next = insertCandidate(removed.itin, dayNo - 1, cand, 99);
     const newId = next.days.find((d) => d.day_index === dayNo)?.items.find((i) => i.poi_id === cand.poi_id)?.id ?? null;

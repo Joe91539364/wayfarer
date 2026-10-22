@@ -1,6 +1,8 @@
-import type { Day, Meta } from '../domain/schema';
+import type { Candidate, Day, Itinerary, Meta } from '../domain/schema';
+import { roadKm } from '../domain/geo';
 import { recomputeDaySummary } from '../domain/summary';
 import { cnMoney } from '../domain/summary';
+import { insertCandidate, removeItem } from './repair';
 
 export interface BudgetResult {
   days: Day[];
@@ -114,4 +116,125 @@ export function setBudget(meta: Meta, days: Day[], amount: number): BudgetResult
 
   const res = applyBudget(meta, days);
   return { days, notes: [...notes, ...res.notes], spent: totalSpend(days).total, budget: amount };
+}
+
+export interface BudgetChange {
+  itin: Itinerary;
+  notes: string[];
+}
+
+/**
+ * 改预算 = 重新决定「这几天怎么过」，不只是换个房型。
+ *
+ * 升：先拿增量的一小半加**付费体验**（演出、船游、门票型景点），剩下的再升住宿 ——
+ *     否则预算翻倍只是住得更贵，白天还是一个样。
+ * 降：先让住宿让钱，还不够就把最贵的非必去项退回候选池（饭一顿不动，饭是刚需）。
+ */
+export function changeBudget(itin: Itinerary, amount: number): BudgetChange {
+  let next = JSON.parse(JSON.stringify(itin)) as Itinerary;
+  const notes: string[] = [];
+  const old = next.meta.budget.amount;
+  if (!Number.isFinite(amount) || amount <= 0 || amount === old) return { itin: next, notes };
+  notes.push(`预算 ${cnMoney(old)} → ${cnMoney(amount)}`);
+
+  if (amount > old) next = addPaidExperiences(next, Math.round((amount - old) * 0.35), notes);
+
+  const res = setBudget(next.meta, next.days, amount);
+  notes.push(...res.notes);
+
+  if (amount < old) next = dropExpensive(next, amount, notes);
+  return { itin: next, notes };
+}
+
+/**
+ * 升预算要真的改变行程，而不只是换个更贵的房。
+ *
+ * 两步：① 先想把钱花在体验上（门票/演出/船游），单价能吃掉增量一小半的优先；
+ *      ② 数据里门票多为 0 时（门票免费的城市很常见），改成「多玩一个高分点」——
+ *         预算宽裕的意义是「有时间也有钱多去一个地方」，不是把房费翻倍了事。
+ */
+function addPaidExperiences(itin: Itinerary, cap: number, notes: string[]): Itinerary {
+  const adults = Math.max(1, itin.meta.travelers.adults);
+  const usable = (c: Candidate) => c.category !== 'restaurant' && c.category !== 'cafe';
+
+  const paid = itin.unscheduled
+    .filter((c) => usable(c) && c.cost.amount > 0)
+    .slice()
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || b.cost.amount - a.cost.amount);
+
+  let spent = 0;
+  for (const c of paid) {
+    const cost = Math.round(c.cost.amount * adults);
+    if (cost <= 0 || cost > cap - spent) continue;
+    const spot = bestDayFor(itin, c);
+    if (!spot) continue;
+    itin = insertCandidate(itin, spot.day - 1, c, 99);
+    spent += cost;
+    notes.push(`D${spot.day} 加了「${c.name}」（${cnMoney(cost)}）`);
+  }
+  if (spent > 0) return itin;
+
+  // 没有收费项：加一个高分点，最多补 2 个，一天一个
+  const free = itin.unscheduled
+    .filter((c) => usable(c) && (c.rating ?? 0) >= 4.4)
+    .slice()
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+  let added = 0;
+  for (const c of free) {
+    if (added >= 2) break;
+    const spot = bestDayFor(itin, c, true);
+    if (!spot) continue;
+    itin = insertCandidate(itin, spot.day - 1, c, 99);
+    added += 1;
+    notes.push(`预算宽裕，D${spot.day} 多排了「${c.name}」（评分 ${(c.rating ?? 0).toFixed(1)}）`);
+  }
+  return itin;
+}
+
+/** 找一天塞这个点：离当天片区最近、当天还没排满；needRoom 时要求当天 <3 个点 */
+function bestDayFor(itin: Itinerary, c: Candidate, needRoom = false): { day: number } | null {
+  let best = -1;
+  let bestKm = Infinity;
+  for (const d of itin.days) {
+    // 只数「景点」，饭不算 —— 一天两顿饭是底配，不该因为它就判定「这天排满了」
+    const sights = d.items.filter((i) => i.type === 'activity');
+    // 「有空位」= 景点不足 4 个（moderate 节奏的体力上限），饭不占这个名额
+    if (sights.length >= (needRoom ? 4 : 5)) continue;
+    const pts = d.items.filter((i) => i.lat != null && i.lng != null) as unknown as { lat: number; lng: number }[];
+    const center = pts.length
+      ? { lat: pts.reduce((s, p) => s + p.lat, 0) / pts.length, lng: pts.reduce((s, p) => s + p.lng, 0) / pts.length }
+      : d.lodging
+        ? { lat: d.lodging.lat, lng: d.lodging.lng }
+        : null;
+    if (!center) continue;
+    const km = roadKm(center, { lat: c.lat, lng: c.lng });
+    if (km < bestKm) {
+      bestKm = km;
+      best = d.day_index;
+    }
+  }
+  // 25km 内塞不进任何一天就算了，别为了改预算把人拉到郊区
+  if (best < 0 || bestKm > 25) return null;
+  return { day: best };
+}
+
+/** 降预算：先砍最贵的非必去项，回到预算内就停手 */
+function dropExpensive(itin: Itinerary, amount: number, notes: string[]): Itinerary {
+  let next = itin;
+  for (let guard = 0; guard < 6; guard++) {
+    if (totalSpend(next.days).total <= amount) break;
+    const victims = next.days
+      .flatMap((d) =>
+        d.items.filter((i) => i.type !== 'meal' && i.type !== 'transit' && !i.locked && i.poi_id && i.cost.amount > 0),
+      )
+      .filter((i) => !next.meta.must_visit.some((m) => i.name.includes(m) || m.includes(i.name)))
+      .sort((a, b) => b.cost.amount - a.cost.amount);
+    const victim = victims[0];
+    if (!victim) break;
+    const res = removeItem(next, victim.id, '预算下调后放不下');
+    if (!res.removed) break;
+    next = res.itin;
+    notes.push(`钱不够了，把「${victim.name}」（${cnMoney(victim.cost.amount)}）退回候选池`);
+  }
+  return next;
 }

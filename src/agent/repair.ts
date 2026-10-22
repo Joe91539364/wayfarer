@@ -45,7 +45,7 @@ function reflowFor(itin: Itinerary, dayIndex: number): Itinerary {
   return recomputeItinerary(next);
 }
 
-function toCandidate(item: ItineraryItem, reason: string): Candidate {
+function toCandidate(item: ItineraryItem, reason: string, adults = 1): Candidate {
   return {
     poi_id: item.poi_id ?? item.id,
     name: item.name,
@@ -54,7 +54,8 @@ function toCandidate(item: ItineraryItem, reason: string): Candidate {
     category: item.category ?? 'sight',
     reason,
     suggested_duration_min: item.duration_min,
-    cost: item.cost,
+    // 候选里一律存「单价」：插回行程时再乘人数，避免来回加一次翻一倍
+    cost: { ...item.cost, amount: Math.round(item.cost.amount / Math.max(1, adults)) },
     indoor: !item.weather_sensitive,
     interest_tags: [],
     rating: 0,
@@ -73,7 +74,7 @@ export function removeItem(itin: Itinerary, itemId: string, reason: string): { i
     next.days[d].items.splice(idx, 1);
     if (item.poi_id) {
       const rest = next.unscheduled.filter((c) => c.poi_id !== item.poi_id);
-      next.unscheduled = [toCandidate(item, reason), ...rest];
+      next.unscheduled = [toCandidate(item, reason, next.meta.travelers.adults), ...rest];
     }
     return { itin: reflowFor(next, d), removed: true };
   }
@@ -100,7 +101,7 @@ export function insertCandidate(
     start_time: '09:00',
     end_time: '10:00',
     duration_min: candidate.suggested_duration_min,
-    cost: candidate.cost,
+    cost: { ...candidate.cost, amount: Math.round(candidate.cost.amount * Math.max(1, itin.meta.travelers.adults)) },
     opening_hours: candidate.opening_hours,
     booking_required: candidate.booking_required,
     booked: false,
