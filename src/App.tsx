@@ -9,6 +9,7 @@ import { importFromText, type ImportResult } from './agent/importer';
 import { DEFAULT_LLM, loadLlmConfig, saveLlmConfig, type LlmConfig } from './agent/llm';
 import { describeMeta, intake, type IntakeResult } from './agent/intake';
 import { addDays, diffDays } from './domain/time';
+import { inheritParsed } from './domain/replan';
 import { ensureCityPack } from './data/citypack';
 import { cityByCode, findCity } from './data/pois';
 import RequirementsCard from './components/RequirementsCard';
@@ -190,32 +191,11 @@ export default function App() {
   }, []);
 
   /**
-   * 就地改需求：没重新说的地方沿用当前行程的设定 ——
-   * 只改天数不该被追问「哪天出发」，只改预算也不该把天数重置回默认 3 天。
-   * 继承出发日期时必须连着把结束日期平移过去，否则 start > end，确认卡会算出「1 天」。
+   * 就地改需求的字段继承（规则在 domain/replan.ts，可单测）：
+   * 天数/日期/目的地没重说就沿用；出发地只在「没换目的地」时沿用。
    */
   function inheritFromCurrent(parsed: IntakeResult) {
-    if (!iti) return;
-    let span = Math.max(1, diffDays(parsed.meta.start_date, parsed.meta.end_date) + 1);
-    if (parsed.missing.includes('days') && iti.days.length > 0) {
-      span = iti.days.length;
-      parsed.meta.end_date = addDays(parsed.meta.start_date, span - 1);
-      parsed.missing = parsed.missing.filter((k) => k !== 'days');
-    }
-    if (parsed.missing.includes('start_date') && iti.meta.start_date) {
-      parsed.meta.start_date = iti.meta.start_date;
-      parsed.meta.end_date = addDays(iti.meta.start_date, span - 1);
-      parsed.missing = parsed.missing.filter((k) => k !== 'start_date');
-    }
-    if (parsed.missing.includes('origin') && iti.meta.origin_city) {
-      parsed.meta.origin_city = iti.meta.origin_city;
-      parsed.missing = parsed.missing.filter((k) => k !== 'origin');
-    }
-    if (parsed.missing.includes('destination') && iti.meta.destination) {
-      parsed.meta.destination = iti.meta.destination;
-      parsed.meta.city_code = iti.meta.city_code;
-      parsed.missing = parsed.missing.filter((k) => k !== 'destination');
-    }
+    inheritParsed(parsed, iti);
   }
 
   /** 解析 → 需要确认就弹确认卡，不需要就直接排 */

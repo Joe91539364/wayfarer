@@ -38,3 +38,8 @@ Thumbs.db
 .idea/
 .vscode/
 .workbuddy/
+
+# 课程作业成品（含班级/姓名/学号占位，不进公开仓库）
+docs/课程作业成品/
+docs/课程作业详细版/
+docs/build_coursework*.py

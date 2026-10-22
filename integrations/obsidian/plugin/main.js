@@ -790,6 +790,11 @@ var require_ops_board = __commonJS({
       visit(chinese(value), prefix, 0);
       return rows;
     }
+    function compactRow(row) {
+      const path = String(row.path || "").split(" / ").filter(Boolean);
+      const label = path.slice(-2).join(" / ") || path[0] || "\u5B57\u6BB5";
+      return label + "\uFF1A" + String(row.value ?? "\u7A7A\u503C").slice(0, 24);
+    }
     function createOpsBoard2(view, host) {
       host.innerHTML = `<div class="wf-ops-stage"><canvas tabindex="0" aria-label="\u5DE5\u7A0B\u5168\u666F\uFF1A\u4EFB\u52A1\u6C47\u805A\u3001\u771F\u5B9E\u8F93\u5165\u8F93\u51FA\u73AF\u5E26\u548C\u8F93\u51FA\u8C31\u7EBF"></canvas><div class="wf-ops-caption"><b>\u884C\u8FF9 / \u8FD0\u884C\u8C03\u5EA6\u4E2D\u5FC3</b><span>\u771F\u5B9E\u4EFB\u52A1\u6C47\u805A \xB7 \u8F93\u5165\u8F93\u51FA\u73AF\u5E26 \xB7 \u8F93\u51FA\u8C31\u7EBF</span></div><div class="wf-ops-clock"></div><div class="wf-ops-legend">\u6BCF\u6761\u6C47\u805A\u7EBF\u4E0E\u8C31\u7EBF\u5747\u53EF\u8FFD\u6EAF\u5B9E\u9645\u5B57\u6BB5 \xB7 \u62D6\u52A8\u73AF\u5E26\u65CB\u8F6C \xB7 \u6EDA\u8F6E\u7F29\u653E \xB7 \u53CC\u51FB\u590D\u4F4D</div><button class="wf-ops-output-toggle">\u8F93\u51FA\u76EE\u5F55</button><aside class="wf-ops-output-directory" hidden><div><b>\u5B9E\u9645\u8F93\u51FA\u5B57\u6BB5</b><button class="wf-ops-output-close" aria-label="\u5173\u95ED\u8F93\u51FA\u76EE\u5F55">\xD7</button></div><input class="wf-ops-output-search" placeholder="\u641C\u7D22\u9636\u6BB5 / \u5B57\u6BB5 / \u503C" aria-label="\u641C\u7D22\u5B9E\u9645\u8F93\u51FA"><div class="wf-ops-output-count"></div><div class="wf-ops-output-rows"></div></aside><aside class="wf-ops-inspector" hidden><button class="wf-ops-close" aria-label="\u5173\u95ED\u6570\u636E\u8BE6\u60C5">\xD7</button><b></b><pre></pre><button class="wf-ops-more">\u67E5\u770B\u5B8C\u6574\u8BB0\u5F55 \u2193</button></aside></div><div class="wf-ops-monitors"><article><h3>\u4EFB\u52A1\u6C47\u805A <span>\u5B9E\u9645\u9636\u6BB5\u4E8B\u4EF6</span></h3><div class="wf-ops-feed"></div></article><article><h3>\u8F93\u5165 / \u8F93\u51FA <span class="wf-ops-payload-caption">\u7B49\u5F85\u8FD0\u884C</span></h3><pre class="wf-ops-payload"></pre></article><article><h3>\u89C4\u5219\u6821\u9A8C <span>\u6240\u9009\u65B9\u6848</span></h3><div class="wf-ops-checks"></div></article><article><h3>\u9636\u6BB5\u8017\u65F6 <span>\u5B9E\u6D4B\u6BEB\u79D2</span></h3><div class="wf-ops-durations"></div></article></div><div class="wf-ops-source">\u5DE5\u7A0B\u56FE\u89C6\u89C9\u6539\u7F16\u81EA <a href="https://github.com/cyberdaddyleo/agent-display">\u8D5B\u535A\u8001\u7238 \xB7 agent-display</a>\uFF08MIT\uFF09 \xB7 \u5F53\u524D\u5185\u5BB9\u6765\u81EA\u672C\u5730\u771F\u5B9E\u8FD0\u884C\uFF0C\u672A\u63A5\u5165\u4E91\u7AEF\u7528\u91CF\u7EDF\u8BA1</div>`;
       const canvas = host.querySelector("canvas"), ctx = canvas.getContext("2d"), stage = host.querySelector(".wf-ops-stage"), inspector = host.querySelector(".wf-ops-inspector"), directory = host.querySelector(".wf-ops-output-directory");
@@ -907,13 +912,13 @@ var require_ops_board = __commonJS({
         for (let col = 0; col < 2; col++) {
           const groups = [];
           for (const record of model.descriptors) {
-            const value = col ? record.output : record.input, rows = view.mode === "workflow" ? [{ text: (col ? "\u8F93\u51FA\uFF1A" : "\u8F93\u5165\uFF1A") + brief2(value) }] : flatten(value, col ? "\u8F93\u51FA" : "\u8F93\u5165", 28), heading = (record.definition ? "\u7ED3\u6784\u5B9A\u4E49 \xB7 " : "") + record.name;
-            for (let k = 0; k < rows.length; k += 7) groups.push({ lines: [heading, ...rows.slice(k, k + 7).map((x) => x.text)], record });
+            const value = col ? record.output : record.input, rows = view.mode === "workflow" ? [{ text: (col ? "\u8F93\u51FA\uFF1A" : "\u8F93\u5165\uFF1A") + brief2(value) }] : flatten(value, col ? "\u8F93\u51FA" : "\u8F93\u5165", 12), heading = (record.definition ? "\u7ED3\u6784\u5B9A\u4E49 \xB7 " : "") + record.name;
+            groups.push({ lines: [heading, ...rows.slice(0, 3).map(compactRow)], record });
           }
           const count = groups.length || 1;
           groups.forEach((group, j) => {
-            const maxLines = Math.max(2, Math.min(8, Math.floor((TAU * R1 / count - 7) / blockLH)));
-            const lines = group.lines.slice(0, maxLines).map((s) => s.length > 52 ? s.slice(0, 51) + "\u2026" : s);
+            const maxLines = Math.max(2, Math.min(4, Math.floor((TAU * R1 / count - 7) / blockLH)));
+            const lines = group.lines.slice(0, maxLines).map((s) => s.length > 34 ? s.slice(0, 33) + "\u2026" : s);
             blocks.push({ type: "table", lines, h: lines.length * blockLH + 4, th: (j + 0.5) / count * TAU, col, ind: 0, seed: j, record: group.record });
           });
         }
@@ -1316,7 +1321,37 @@ var require_ops_board = __commonJS({
         }
         c.globalAlpha = 1;
       }
+      function drawInputFeed(c, t) {
+        const feed = (model.sources[0] || []).filter((x) => x.record), cardW = Math.min(230, Math.max(170, W * 0.14)), cardH = 27, gap = 8, total = cardH + gap;
+        c.save();
+        c.textAlign = "left";
+        c.font = "600 8px " + FONT;
+        c.fillStyle = T.dark ? T.hi : T.text;
+        c.fillText("\u5B9E\u65F6\u8F93\u5165\u6D41", 18, 58);
+        c.beginPath();
+        c.rect(12, 68, cardW + 10, H - 94);
+        c.clip();
+        for (let k = -2; k < Math.ceil((H - 80) / total) + 2; k++) {
+          const n = Math.max(1, feed.length), idx = (k % n + n) % n, y = 82 + k * total - t * 22 % total, row = feed[idx];
+          if (!row) continue;
+          c.globalAlpha = 0.42;
+          c.fillStyle = T.dark ? "#0c3328" : "#e8eee5";
+          c.fillRect(12, y, cardW + 10, cardH);
+          c.globalAlpha = 0.8;
+          c.strokeStyle = T.dark ? T.line : T.dim;
+          c.lineWidth = 0.55;
+          c.strokeRect(12, y, cardW + 10, cardH);
+          c.globalAlpha = 1;
+          c.fillStyle = T.dark ? T.hi : T.text;
+          c.font = "7px " + FONT;
+          c.fillText(String(row.record?.name || "\u8F93\u5165").slice(0, 10), 20, y + 10);
+          c.fillStyle = T.dim;
+          c.fillText(compactRow(row).slice(0, 25), 20, y + 20);
+        }
+        c.restore();
+      }
       function drawWheelMarks(c, t) {
+        drawInputFeed(c, t);
         const { cx, cy, R1, R2, narrow } = G, rot = t * SPIN;
         const p = new Path2D(), s1 = 6 / R1, t1 = visAng(R1, 12);
         for (let k = Math.ceil((-t1 - rot) / s1), e = Math.floor((t1 - rot) / s1); k <= e; k++) {
@@ -1385,19 +1420,25 @@ var require_ops_board = __commonJS({
         });
         if (T.dark && view.effectStrength > 0) {
           c.globalCompositeOperation = "lighter";
+          base.forEach((p, i) => {
+            c.strokeStyle = i === 0 ? T.hot : T.line;
+            c.globalAlpha = 0.055 + i * 0.018;
+            c.lineWidth = 3.2 - i * 0.35;
+            c.stroke(p);
+          });
           c.strokeStyle = T.hot;
-          c.globalAlpha = 0.1;
-          c.lineWidth = 4.5;
+          c.globalAlpha = 0.14;
+          c.lineWidth = 5.2;
           c.stroke(hotP);
-          c.globalAlpha = 0.6;
-          c.lineWidth = 0.9;
+          c.globalAlpha = 0.82;
+          c.lineWidth = 1.15;
           c.stroke(hotP);
-          c.globalAlpha = 0.12;
+          c.globalAlpha = 0.18;
           c.strokeStyle = T.hi;
-          c.lineWidth = 5;
+          c.lineWidth = 5.5;
           c.stroke(dashP);
-          c.globalAlpha = 0.9;
-          c.lineWidth = 1.6;
+          c.globalAlpha = 0.98;
+          c.lineWidth = 1.9;
           c.stroke(dashP);
           c.strokeStyle = T.hot;
           c.globalAlpha = 0.3;

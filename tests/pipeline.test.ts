@@ -58,6 +58,8 @@ describe('INTAKE', () => {
     expect(intake('出发地是杭州，去厦门玩3天').meta.origin_city).toBe('杭州');
     expect(intake('从江苏宿迁去西安玩3天').meta.origin_city).toBe('宿迁');
     expect(intake('宿迁 → 成都，4天，两个人，预算6000').meta.origin_city).toBe('宿迁');
+    expect(intake('我人在西安，想去成都玩3天，预算6000').meta.origin_city).toBe('西安');
+    expect(intake('住在武汉，十一想去北京玩4天，预算8000').meta.origin_city).toBe('武汉');
   });
 
   it('时间状语和「自由行」不会被当成出发地', () => {
