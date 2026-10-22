@@ -8,7 +8,7 @@ import { whatIf, type WhatIfKind, type WhatIfResult } from './agent/whatif';
 import { importFromText, type ImportResult } from './agent/importer';
 import { DEFAULT_LLM, loadLlmConfig, saveLlmConfig, type LlmConfig } from './agent/llm';
 import { describeMeta, intake, type IntakeResult } from './agent/intake';
-import { addDays, diffDays } from './domain/time';
+import { addDays, clockInTz, diffDays } from './domain/time';
 import { inheritParsed } from './domain/replan';
 import { ensureCityPack } from './data/citypack';
 import { cityByCode, findCity } from './data/pois';
@@ -17,6 +17,7 @@ import IntercityCard from './components/IntercityCard';
 import NextStopAlert from './components/NextStopAlert';
 import ExpressionWarnBar from './components/ExpressionWarnBar';
 import FloatingDock from './components/FloatingDock';
+import LiveClock from './components/LiveClock';
 import InstallBanner from './components/InstallBanner';
 import { understandExpression, type ExprCheck } from './agent/understand';
 import { cnMoney } from './domain/summary';
@@ -39,6 +40,7 @@ import WeatherAlertBar from './components/WeatherAlertBar';
 import TaxiSheet from './components/TaxiSheet';
 import ReviewBoard from './components/ReviewBoard';
 import { useCatalog } from './hooks/useCatalog';
+import { useNow } from './hooks/useNow';
 import { fmtCountdown, fmtUptime, useResident } from './hooks/useResident';
 import { buildAlerts, shouldNotify, todayISO } from './domain/alerts';
 import BindingsModal from './components/BindingsModal';
@@ -89,7 +91,7 @@ export default function App() {
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const [hotelDay, setHotelDay] = useState<number | null>(null);
-  const [now, setNow] = useState(() => new Date());
+  const { now, driftMs, synced } = useNow();
   const [followReal, setFollowReal] = useState(true);
   const [seek, setSeek] = useState(0);
   const [user, setUser] = useState<User | null>(() => loadUser());
@@ -168,12 +170,6 @@ export default function App() {
       /* ignore */
     }
   }, [notify]);
-
-  useEffect(() => {
-    if (!followReal) return;
-    const t = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(t);
-  }, [followReal]);
 
   useEffect(() => {
     if (!iti) return;
@@ -455,11 +451,23 @@ export default function App() {
     notify(`住宿换成「${hotel.name}」，房费与次日出发时间已重算`);
   }
 
+  // 打开就在行程期内的话，直接停到今天 —— 现实时间对齐，不用手动翻
+  // 只跟着行程版本走，不跟秒走，免得每秒抢用户的选择
+  useEffect(() => {
+    if (!iti) return;
+    const today = clockInTz(new Date(), iti.meta.timezone).date;
+    const hit = iti.days.find((d) => d.date === today);
+    if (hit) setActiveDay(hit.day_index);
+  }, [iti?.id]);
+
   const clock = useMemo(() => {
     if (!iti) return now;
     if (followReal) return now;
     return clockFromSlider(iti, seek);
   }, [iti, now, followReal, seek]);
+
+  // 行程里的「现在」按目的地当地时间算（跨时区时和本机钟不是一回事）
+  const nowLocal = useMemo(() => clockInTz(now, iti?.meta.timezone ?? 'Asia/Shanghai'), [now, iti?.meta.timezone]);
 
   const cityWeather = iti ? catalog.weather[iti.meta.city_code] : undefined;
   const alerts = useMemo(
@@ -627,6 +635,7 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-actions">
+          <LiveClock now={now} itinerary={iti} synced={synced} driftMs={driftMs} />
           <button className="btn btn-ghost" onClick={() => setBindingsOpen(true)} title="绑定行程软件">
             <IconLink size={13} /> 绑定
           </button>
@@ -947,6 +956,8 @@ export default function App() {
               onMove={move}
               onOpenDetail={openItem}
               momentByPoi={momentByPoi}
+              nowInfo={{ date: nowLocal.date, hhmm: nowLocal.hhmm }}
+              tzOffsetMin={nowLocal.offsetMin}
             />
           </main>
 

@@ -7,6 +7,7 @@
  *
  * 接口：
  *   GET  /api/health             存活检查 + 常驻调度状态（uptime / 上次刷新 / 下轮时间）
+ *   GET  /api/now                权威时钟（epoch / ISO / 时区），前端据此校准本机钟
  *   GET  /api/catalog            最新事实层（catalog.json）
  *   GET  /api/report             最近一轮的运行报告（含日志）
  *   GET  /api/keys               看 Key 配没配（不回传明文）
@@ -178,6 +179,23 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'OPTIONS') {
     send(res, 204, '');
+    return;
+  }
+
+  // 权威时钟：本机时间可能不准（时区错、手动改过、虚拟机漂移），
+  // 前端拿它算一次漂移再自己走秒，避免「今天」被算错一天。
+  if (url.pathname === '/api/now') {
+    const d = new Date();
+    send(
+      res,
+      200,
+      JSON.stringify({
+        epoch: d.getTime(),
+        iso: d.toISOString(),
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        offsetMin: -d.getTimezoneOffset(),
+      }),
+    );
     return;
   }
 

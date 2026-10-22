@@ -100,3 +100,78 @@ export function parseFlexibleTime(input: string): string | null {
   }
   return null;
 }
+
+/* ------------------------- 现实时钟 / 时区 ------------------------- */
+
+/** 某个 IANA 时区在此刻相对 UTC 的偏移（分钟，东八区 = 480）。Intl 不可用时退回本机时区。 */
+export function tzOffsetMin(now: Date, tz: string): number {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).formatToParts(now);
+    const get = (k: string) => Number(parts.find((p) => p.type === k)?.value ?? NaN);
+    const asUTC = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+    if (!Number.isFinite(asUTC)) return -now.getTimezoneOffset();
+    return Math.round((asUTC - Math.floor(now.getTime() / 1000) * 1000) / 60000);
+  } catch {
+    return -now.getTimezoneOffset();
+  }
+}
+
+export interface ClockFace {
+  /** 当地日期 YYYY-MM-DD */
+  date: string;
+  /** 当地时刻 HH:MM */
+  hhmm: string;
+  /** 当地时刻 HH:MM:SS */
+  hhmmss: string;
+  /** 当地星期（周四） */
+  weekday: string;
+  /** 时区偏移（分钟） */
+  offsetMin: number;
+}
+
+const WEEKDAY_FULL = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+/** 把「此刻」换算成指定时区的钟面。 */
+export function clockInTz(now: Date, tz: string): ClockFace {
+  const offsetMin = tzOffsetMin(now, tz);
+  const shifted = new Date(now.getTime() + offsetMin * 60000);
+  const iso = shifted.toISOString();
+  const date = iso.slice(0, 10);
+  const hhmmss = iso.slice(11, 19);
+  return {
+    date,
+    hhmm: hhmmss.slice(0, 5),
+    hhmmss,
+    weekday: WEEKDAY_FULL[shifted.getUTCDay()],
+    offsetMin,
+  };
+}
+
+/** 现在算行程的哪一段：出发前 / 进行中第几天 / 已结束。 */
+export interface TripPhase {
+  phase: 'before' | 'during' | 'after';
+  /** before/after 时是相差天数；during 时是 0 */
+  days: number;
+  /** during 时是第几天（1 起），其余为 0 */
+  dayIndex: number;
+}
+
+export function tripPhase(start: string, end: string, today: string): TripPhase {
+  if (today < start) return { phase: 'before', days: diffDays(today, start), dayIndex: 0 };
+  if (today > end) return { phase: 'after', days: diffDays(end, today), dayIndex: 0 };
+  return { phase: 'during', days: 0, dayIndex: diffDays(start, today) + 1 };
+}
+
+/** 距某个时刻还有多少分钟（负数 = 已经过去）。 */
+export function minutesUntil(nowHHMM: string, targetHHMM: string): number {
+  return toMin(targetHHMM) - toMin(nowHHMM);
+}

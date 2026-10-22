@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { Day, Itinerary, ItineraryItem, Violation } from '../domain/schema';
 import { CATEGORY_CN, TRANSIT_CN } from '../domain/schema';
-import { weekdayLabel, formatDateCN } from '../domain/time';
+import { weekdayLabel, formatDateCN, toMin, durationMin } from '../domain/time';
+import { solarTimes } from '../domain/solar';
 import { cnMoney } from '../domain/summary';
 import { DAY_COLORS } from './MapView';
 import {
@@ -11,6 +12,7 @@ import {
   IconHeart,
   IconLock,
   IconMenu,
+  IconSun,
   IconSwap,
   IconTrain,
   IconTrash,
@@ -30,6 +32,10 @@ interface Props {
   onOpenDetail: (itemId: string) => void;
   /** 每个点位挂了几张幸福时刻，没有就不传 */
   momentByPoi?: Map<string, number>;
+  /** 现实中的「此刻」（目的地的日期与钟点），用于画现在游标 */
+  nowInfo?: { date: string; hhmm: string } | null;
+  /** 目的地时区偏移（分钟），算日出日落用 */
+  tzOffsetMin?: number;
 }
 
 function ModeIcon({ mode }: { mode: string | null }) {
@@ -43,6 +49,8 @@ function ItemCard({
   dayColor,
   warns,
   shots,
+  happening,
+  remainMin,
   onToggleLock,
   onSwap,
   onDelete,
@@ -54,6 +62,10 @@ function ItemCard({
   dayColor: string;
   warns: Violation[];
   shots: number;
+  /** 此刻正在这一项里 */
+  happening?: boolean;
+  /** 还剩多少分钟结束 */
+  remainMin?: number | null;
   onToggleLock: () => void;
   onSwap: () => void;
   onDelete: () => void;
@@ -86,6 +98,11 @@ function ItemCard({
         <button className="item-name" onClick={onOpenDetail} title="查看详情 / 评论 / 修改">
           {item.name}
         </button>
+        {happening && (
+          <span className="item-happening">
+            <i /> 进行中{remainMin != null ? ` · 还剩 ${remainMin} 分` : ''}
+          </span>
+        )}
         {item.category && <span className="item-cat">{CATEGORY_CN[item.category as never] ?? item.category}</span>}
         <span className="item-cost">{item.cost.amount > 0 ? cnMoney(item.cost.amount) : '免费'}</span>
       </div>
@@ -175,6 +192,8 @@ function DayBlock({
   onSelectDay,
   onOpenDetail,
   momentByPoi,
+  nowInfo,
+  tzOffsetMin,
   active,
 }: {
   day: Day;
@@ -187,6 +206,8 @@ function DayBlock({
   onSelectDay: (n: number) => void;
   onOpenDetail: (itemId: string) => void;
   momentByPoi?: Map<string, number>;
+  nowInfo?: { date: string; hhmm: string } | null;
+  tzOffsetMin?: number;
   active: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(collapsedDefault);
@@ -201,6 +222,70 @@ function DayBlock({
   const transitCount = day.items.filter((i) => i.type === 'transit').length;
   const warnCount = warns.length;
 
+  // 只有「今天」这一天画现在游标；其余日子不该出现假的现在
+  const nowMin = nowInfo && nowInfo.date === day.date ? toMin(nowInfo.hhmm) : null;
+  const isToday = nowMin != null;
+  const solar = day.base_area ? solarTimes(day.date, day.base_area.lat, day.base_area.lng, tzOffsetMin ?? 480) : null;
+
+  function renderRow(item: ItineraryItem) {
+    if (item.type === 'transit') {
+      return (
+        <div className="transit-row" key={item.id}>
+          <div className="time-col" style={{ paddingTop: 6 }}>
+            {item.start_time}
+          </div>
+          <div className="rail">
+            <div className="rail-dot" style={{ width: 5, height: 5, marginTop: 11, borderWidth: 1, opacity: 0.5 }} />
+          </div>
+          <div className="transit-card">
+            <span className="mode">
+              <ModeIcon mode={item.mode} />
+              {TRANSIT_CN[item.mode ?? 'walk'] ?? item.mode}
+            </span>
+            <span>{item.duration_min} 分钟</span>
+            {item.distance_m != null && <span className="dist">{((item.distance_m ?? 0) / 1000).toFixed(1)}km</span>}
+            {item.cost.amount > 0 && <span className="dist">{cnMoney(item.cost.amount)}</span>}
+          </div>
+        </div>
+      );
+    }
+    const startMin = toMin(item.start_time);
+    const endMin = startMin + durationMin(item.start_time, item.end_time);
+    const happening = nowMin != null && nowMin >= startMin && nowMin < endMin;
+    const remainMin = happening ? endMin - nowMin : null;
+    return (
+      <div className={`item-row ${happening ? 'is-now' : ''}`} key={item.id}>
+        <div className="time-col">
+          {item.start_time}
+          <small>{item.end_time}</small>
+        </div>
+        <div className="rail">
+          <div className="rail-dot" style={{ borderColor: color }} />
+        </div>
+        <ItemCard
+          item={item}
+          dayColor={color}
+          warns={byItem[item.id] ?? []}
+          shots={item.poi_id ? (momentByPoi?.get(item.poi_id) ?? 0) : 0}
+          happening={happening}
+          remainMin={remainMin}
+          onToggleLock={() => onToggleLock(item.id)}
+          onSwap={() => onSwap(item.id)}
+          onDelete={() => onDelete(item.id)}
+          onOpenDetail={() => onOpenDetail(item.id)}
+          onDragStart={(e) => {
+            e.dataTransfer.setData('text/plain', item.id);
+            e.dataTransfer.effectAllowed = 'move';
+          }}
+          onDrop={(e) => {
+            const fromId = e.dataTransfer.getData('text/plain');
+            if (fromId && fromId !== item.id) onMove(day.day_index, fromId, item.id);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <section className="day" style={{ ['--day-color' as string]: color }}>
       <header className="day-head" onClick={() => { setCollapsed((v) => !v); onSelectDay(day.day_index); }}>
@@ -210,6 +295,16 @@ function DayBlock({
             {formatDateCN(day.date)} <span style={{ fontSize: 12, color: '#8a8377', marginLeft: 6 }}>{weekdayLabel(day.date)}</span>
           </div>
           {day.base_area && <div className="day-area">◍ {day.base_area.name}</div>}
+          {(solar || isToday) && (
+            <div className="day-solar">
+              {isToday && <span className="day-now-tag">现在 {nowInfo?.hhmm}</span>}
+              {solar && (
+                <span title={`白昼 ${(solar.dayLengthMin / 60).toFixed(1)} 小时 · 黄金时刻 ${solar.goldenStart} 起`}>
+                  <IconSun size={11} /> {solar.sunrise} 日出 · {solar.sunset} 日落
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="day-stats">
           <span>
@@ -238,58 +333,38 @@ function DayBlock({
       {!collapsed && (
         <div className="items">
           {day.items.length === 0 && <div className="empty-day">这一天还没有安排</div>}
-          {day.items.map((item) => {
-            if (item.type === 'transit') {
-              return (
-                <div className="transit-row" key={item.id}>
-                  <div className="time-col" style={{ paddingTop: 6 }}>
-                    {item.start_time}
-                  </div>
-                  <div className="rail">
-                    <div className="rail-dot" style={{ width: 5, height: 5, marginTop: 11, borderWidth: 1, opacity: 0.5 }} />
-                  </div>
-                  <div className="transit-card">
-                    <span className="mode">
-                      <ModeIcon mode={item.mode} />
-                      {TRANSIT_CN[item.mode ?? 'walk'] ?? item.mode}
-                    </span>
-                    <span>{item.duration_min} 分钟</span>
-                    {item.distance_m != null && <span className="dist">{((item.distance_m ?? 0) / 1000).toFixed(1)}km</span>}
-                    {item.cost.amount > 0 && <span className="dist">{cnMoney(item.cost.amount)}</span>}
-                  </div>
+          {(() => {
+            // 「现在」游标插在真实时刻应处的位置：第一个开始时间晚于现在的项之前
+            let placed = false;
+            const nowRow = (
+              <div className="now-row" key="now-line">
+                <div className="now-time">{nowInfo?.hhmm}</div>
+                <div className="now-rail">
+                  <span className="now-dot" />
                 </div>
-              );
-            }
-            return (
-              <div className="item-row" key={item.id}>
-                <div className="time-col">
-                  {item.start_time}
-                  <small>{item.end_time}</small>
-                </div>
-                <div className="rail">
-                  <div className="rail-dot" style={{ borderColor: color }} />
-                </div>
-                <ItemCard
-                  item={item}
-                  dayColor={color}
-                  warns={byItem[item.id] ?? []}
-                  shots={item.poi_id ? (momentByPoi?.get(item.poi_id) ?? 0) : 0}
-                  onToggleLock={() => onToggleLock(item.id)}
-                  onSwap={() => onSwap(item.id)}
-                  onDelete={() => onDelete(item.id)}
-                  onOpenDetail={() => onOpenDetail(item.id)}
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('text/plain', item.id);
-                    e.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onDrop={(e) => {
-                    const fromId = e.dataTransfer.getData('text/plain');
-                    if (fromId && fromId !== item.id) onMove(day.day_index, fromId, item.id);
-                  }}
-                />
+                <div className="now-label">现在</div>
               </div>
             );
-          })}
+            const rows = day.items.map((item) => {
+              const insertNow = nowMin != null && !placed && nowMin < toMin(item.start_time);
+              if (insertNow) placed = true;
+              const body = renderRow(item);
+              return insertNow ? (
+                <Fragment key={`wrap-${item.id}`}>
+                  {nowRow}
+                  {body}
+                </Fragment>
+              ) : (
+                body
+              );
+            });
+            return (
+              <>
+                {rows}
+                {nowMin != null && !placed && nowRow}
+              </>
+            );
+          })()}
           <div className="tiny muted" style={{ marginTop: 8, paddingLeft: 72 }}>
             {transitCount} 段通勤由程序计算 · 可拖动卡片调整顺序
           </div>
@@ -329,6 +404,8 @@ export default function Timeline(props: Props) {
           onSelectDay={onSelectDay}
           onOpenDetail={props.onOpenDetail}
           momentByPoi={props.momentByPoi}
+          nowInfo={props.nowInfo}
+          tzOffsetMin={props.tzOffsetMin}
           active={activeDay === day.day_index}
         />
       ))}

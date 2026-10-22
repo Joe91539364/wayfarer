@@ -182,3 +182,17 @@ export const IconHeart = ({ size, ...p }: P) => (
     <path d="M12 20.1c-1-.7-7.6-5-7.6-9.6a4.3 4.3 0 0 1 7.6-2.6 4.3 4.3 0 0 1 7.6 2.6c0 4.6-6.6 8.9-7.6 9.6Z" />
   </svg>
 );
+
+export const IconClock = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <circle cx="12" cy="12" r="8.4" />
+    <path d="M12 7.6V12l3 1.9" />
+  </svg>
+);
+
+export const IconSun = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <circle cx="12" cy="12" r="4.1" />
+    <path d="M12 3.2v2.1M12 18.7v2.1M3.2 12h2.1M18.7 12h2.1M5.8 5.8l1.5 1.5M16.7 16.7l1.5 1.5M18.2 5.8l-1.5 1.5M7.3 16.7l-1.5 1.5" />
+  </svg>
+);
