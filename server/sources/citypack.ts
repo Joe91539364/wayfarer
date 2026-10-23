@@ -189,22 +189,40 @@ function cacheFile(key: string) {
   return resolve(CACHE_DIR, `${key}.json`);
 }
 
-export function readPackCache(key: string): CityPack | null {
+export function readPackCache(key: string, allowStale = false): CityPack | null {
   try {
     const f = cacheFile(key);
     if (!existsSync(f)) return null;
     const pack = JSON.parse(readFileSync(f, 'utf8')) as CityPack;
-    if (Date.now() - pack.generated_at > TTL) return null;
+    if (!allowStale && Date.now() - pack.generated_at > TTL) return null;
     return { ...pack, source: 'cache' };
   } catch {
     return null;
   }
 }
 
+/**
+ * 建包：缓存 → 抓高德 → **抓不到就退回过期缓存**。
+ *
+ * 校园网/Key 限流时高德经常整段抽风，直接 502 会让「重庆」这种早就建过包的城市
+ * 也用不了。过期数据顶多是三天前的评分，比「城市包没建成」好得多。
+ */
 export async function buildCityPack(name: string, key: string): Promise<CityPack> {
   const cached = readPackCache(name);
   if (cached) return cached;
+  const stale = readPackCache(name, true);
+  try {
+    return await crawlCityPack(name, key);
+  } catch (err) {
+    if (stale) {
+      const hours = Math.round((Date.now() - stale.generated_at) / 3600000);
+      return { ...stale, note: `${stale.note}（高德暂时抓不到，用的是 ${hours} 小时前的缓存）` };
+    }
+    throw err;
+  }
+}
 
+async function crawlCityPack(name: string, key: string): Promise<CityPack> {
   const geo = await amapGet(`${GEO}?key=${key}&address=${encodeURIComponent(name)}&output=json`);
   const geoList = (geo?.geocodes as { location?: string; adcode?: string; city?: string; province?: string }[]) ?? [];
   const g = geoList[0];

@@ -25,6 +25,7 @@ import { understandExpression, type ExprCheck } from './agent/understand';
 import { cnMoney } from './domain/summary';
 import { verify } from './verifier';
 import IntakeConsole from './components/IntakeConsole';
+import HeroScene from './components/HeroScene';
 import Timeline from './components/Timeline';
 import RightRail from './components/RightRail';
 import ImportModal from './components/ImportModal';
@@ -818,9 +819,12 @@ export default function App() {
 
       {running && <div className="loading-bar" style={{ width: `${progress}%` }} />}
 
+      <HeroScene active={!iti && !running} />
+
       {!iti && !running && (
-        <main className="hero">
+        <main className="hero landing-hero">
           <div className="hero-inner">
+            <div className="scene-lede">
             <span className="eyebrow">
               <span className="dot" />
               Travel Planning Agent · verified itineraries
@@ -835,6 +839,15 @@ export default function App() {
               时间由程序累加，然后跑 <b>8 条硬规则</b>（时间连续 / 营业时间 / 地理跨度 / 预算 / 体力 / 预约 / 天气 / 交通可达），
               报错就定向修复，最多 3 轮，最后产出一份可展开验算的<b>可行性证明</b>。
             </p>
+            </div>
+
+            <div className="scene-beat">
+              <p>
+                一份行程里有几十个数字，
+                <br />
+                每一个都算得出来。
+              </p>
+            </div>
 
             <div className="composer">
               <textarea
