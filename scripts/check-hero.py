@@ -22,6 +22,12 @@ opts.add_argument("--headless=new")
 opts.add_argument("--window-size=1440,900")
 opts.add_argument("--no-proxy-server")
 drv = webdriver.Edge(options=opts)
+# headless 默认 prefers-reduced-motion: reduce，那样永远测不到「续播」；
+# 这里显式声明不减弱动效，跟真实用户一致
+try:
+    drv.execute_cdp_cmd("Emulation.setEmulatedMedia", {"features": [{"name": "prefers-reduced-motion", "value": "no-preference"}]})
+except Exception:
+    pass
 
 fails, passes = [], []
 
@@ -36,6 +42,8 @@ def p_value():
 
 
 def scroll_to(ratio):
+    # 先派一个滚轮事件：真实用户是靠手势滚的，代码里也只认手势
+    drv.execute_script("window.dispatchEvent(new WheelEvent('wheel', {deltaY: 120, bubbles: true}))")
     drv.execute_script("window.scrollTo({top: innerHeight * 1.15 * arguments[0], behavior:'instant'})", ratio)
     time.sleep(1.2)
 
@@ -90,15 +98,32 @@ try:
         "return r.top < innerHeight && r.bottom > 0;"
     )
     check("输入卡片进入视口", bool(visible))
-    time.sleep(1.2)
+    time.sleep(1.6)
     paused = bool(drv.execute_script("return arguments[0].paused", video))
     reduce = bool(drv.execute_script("return matchMedia('(prefers-reduced-motion: reduce)').matches"))
     if reduce:
         # 减少动效偏好下就该停在最后一帧，不许自己动
         check("减少动效：沉底后停在末帧", paused and p2 > 0.95, f"paused={paused}")
     else:
-        check("沉底后视频转为循环播放", not paused, f"paused={paused}")
+        t_a = float(drv.execute_script("return arguments[0].currentTime", video))
+        check("沉底后开始续播", (not paused) or t_a > dur - 2.0, f"paused={paused} t={t_a:.2f}")
+        # 只循环最后一小段：不许跳回片头（那才会「一闪而过」）
+        check("续播只在水下尾部循环", t_a > dur * 0.6, f"t={t_a:.2f} / {dur:.2f}")
     drv.get_screenshot_as_file(os.path.join(OUT, "hero-3-underwater.png"))
+
+    # 刷新在底部：浏览器会恢复滚动位置，但绝不能一开播就「嗖」过去
+    drv.refresh()
+    time.sleep(3.0)
+    v2 = drv.find_elements("css selector", ".hero-video")
+    if v2:
+        samples = []
+        for _ in range(4):
+            samples.append(drv.execute_script("const v=document.querySelector('.hero-video'); return {ct:+v.currentTime.toFixed(2), paused:v.paused}", ))
+            time.sleep(0.35)
+        check("刷新后从头开始（不闪）", all(s_["ct"] < 0.3 for s_ in samples), str(samples))
+        check("刷新后没有自动播放", all(s_["paused"] for s_ in samples), str(samples))
+    else:
+        check("刷新后仍有视频", False)
 
     print(f"\n{len(passes)} passed, {len(fails)} failed")
     for f in fails:
