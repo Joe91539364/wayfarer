@@ -73,9 +73,26 @@ export default function App() {
   const [plannedRequest, setPlannedRequest] = useState('');
   const [stages, setStages] = useState<StageEvent[]>([]);
   const [running, setRunning] = useState(false);
-  const [iti, setIti] = useState<Itinerary | null>(null);
+  /**
+   * 行程同步读出来，别等 effect。
+   *
+   * 以前是 useState(null) + 挂载后从 localStorage 恢复：首帧先画首页，下一帧被
+   * 工作台顶掉 —— 有存档时首页（和首屏视频）只闪一下，看起来像 bug。
+   * 分享链接（#plan=）要异步解码，那种情况仍然先停在首页。
+   */
+  const [iti, setIti] = useState<Itinerary | null>(() => {
+    if (typeof window === 'undefined' || location.hash.startsWith('#plan=')) return null;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Itinerary;
+      return parsed?.days?.length ? parsed : null;
+    } catch {
+      return null;
+    }
+  });
   const [repairResult, setRepairResult] = useState<RepairResult | null>(null);
-  const [activeDay, setActiveDay] = useState(1);
+  const [activeDay, setActiveDay] = useState(() => iti?.days?.[0]?.day_index ?? 1);
   const [whatIfResult, setWhatIfResult] = useState<WhatIfResult | null>(null);
   const [busyWhatIf, setBusyWhatIf] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -168,13 +185,14 @@ export default function App() {
       });
       return;
     }
+    // 普通打开已经在 useState 里同步恢复过了，这里只兜底老版本留下的数据
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Itinerary;
       if (parsed?.days?.length) {
-        setIti(parsed);
-        setActiveDay(parsed.days[0].day_index);
+        setIti((prev) => prev ?? parsed);
+        setActiveDay((prev) => (parsed.days.some((d) => d.day_index === prev) ? prev : parsed.days[0].day_index));
       }
     } catch {
       /* ignore */
