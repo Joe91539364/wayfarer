@@ -48,16 +48,19 @@ powershell -ExecutionPolicy Bypass -File scripts\uninstall-autostart.ps1   # 撤
 盯着 `node server/app.mjs`，退出即重启）。定时刷新做在服务进程内部而不是另开一个 crawl:watch，
 常驻只占一个进程。
 
-## 首屏：从天空沉进水下
+## 首屏：一段视频，跟着滚动下潜
 
-首页是一条**滚动驱动的场景**（`src/components/HeroScene.tsx`，Canvas 2D，零依赖）：
+首页是**真实镜头 + 滚动擦洗**（`src/components/HeroScene.tsx` + `public/hero/dive.mp4`）：
 
-- 第一屏只有一句话和一片暮色天空，输入框故意留在折叠线以下 —— 先让人看，再让人用；
-- 往下滚：海面从屏幕底部漫上来，越过远山、越过落日，最后整屏沉到水下，
-  光柱、气泡、鱼群剪影依次出现，输入卡片这时才浮到眼前；
-- 进度用**真实可滚动高度**做分母（滚到底必然完全入水），用 `rAF` 阻尼跟随（0.12 线性插值），
-  标题、独白、提示都吃同一个 `--hero-p` 变量，滚动和淡出永远不会打架；
-- `prefers-reduced-motion` 下退化成静态帧 + 滚动重绘；DPR 封顶 2，页面切换即卸载。
+- 第一屏只有一句话和一段暮色山海，输入框故意留在折叠线以下 —— 先让人看，再让人用；
+- 这段 6 秒镜头本身就是「远山落日 → 镜头下潜穿过水面 → 水下光柱」的连续运动。
+  没滚到时停在第一帧，滚动多少走多少（`currentTime = p × duration`），手指和画面同一根轴；
+- 滚到底自动切回播放并循环，让水下那段继续缓缓流动；标题、独白、提示吃同一个 `--hero-p`；
+- 视频加载失败时退回 Canvas 手绘版（`heroScenePaint.ts`），首屏不会白屏；
+  `prefers-reduced-motion` 下只擦洗不自播。
+
+**视频能擦洗的前提是服务端支持 Range**：现在 `serveFile` 对 `Range: bytes=` 回 206，
+否则浏览器能播但 `seekable` 是 `[0,0]`，`currentTime` 写了也纹丝不动（这个坑踩过）。
 
 顶栏在首屏期间换成深色玻璃条（`.shell:not(.shell-fixed) .topbar`），进入工作台自动恢复。
 

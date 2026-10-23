@@ -44,7 +44,20 @@ try:
     drv.get(BASE + "/")
     time.sleep(3.2)
 
-    check("有首屏画布", len(drv.find_elements("css selector", ".hero-scene canvas")) == 1)
+    videos = drv.find_elements("css selector", ".hero-video")
+    check("首屏是视频（不是画布）", len(videos) == 1)
+    if not videos:
+        print("no video element; abort")
+        raise SystemExit(1)
+    video = videos[0]
+    for _ in range(20):
+        rs = int(drv.execute_script("return arguments[0].readyState", video))
+        if rs >= 2:
+            break
+        time.sleep(0.6)
+    check("视频已能解码（readyState>=2）", rs >= 2, f"readyState={rs}")
+    dur = float(drv.execute_script("return arguments[0].duration || 0", video))
+    check("拿到时长", dur > 1, f"{dur:.2f}s")
     check("有滚动提示", "沉进这次旅行" in drv.find_element("css selector", ".scene-hint").text)
 
     h1 = drv.find_element("css selector", ".scene-lede h1")
@@ -58,10 +71,12 @@ try:
     check("进度从 0 开始", abs(p0) < 0.02, f"{p0:.3f}")
     drv.get_screenshot_as_file(os.path.join(OUT, "hero-1-surface.png"))
 
-    # 滚到 45%：水面漫上来
+    # 滚到 45%：镜头开始下潜，视频时间轴跟着走
     scroll_to(0.45)
     p1 = p_value()
     check("滚动后进度上升", p1 > p0 + 0.25, f"{p0:.3f} → {p1:.3f}")
+    t1 = float(drv.execute_script("return arguments[0].currentTime", video))
+    check("视频跟着滚动擦洗", t1 > dur * 0.25, f"currentTime={t1:.2f}s / {dur:.2f}s")
     drv.get_screenshot_as_file(os.path.join(OUT, "hero-2-dive.png"))
 
     # 滚到底：进水，输入卡片可见
@@ -75,6 +90,14 @@ try:
         "return r.top < innerHeight && r.bottom > 0;"
     )
     check("输入卡片进入视口", bool(visible))
+    time.sleep(1.2)
+    paused = bool(drv.execute_script("return arguments[0].paused", video))
+    reduce = bool(drv.execute_script("return matchMedia('(prefers-reduced-motion: reduce)').matches"))
+    if reduce:
+        # 减少动效偏好下就该停在最后一帧，不许自己动
+        check("减少动效：沉底后停在末帧", paused and p2 > 0.95, f"paused={paused}")
+    else:
+        check("沉底后视频转为循环播放", not paused, f"paused={paused}")
     drv.get_screenshot_as_file(os.path.join(OUT, "hero-3-underwater.png"))
 
     print(f"\n{len(passes)} passed, {len(fails)} failed")

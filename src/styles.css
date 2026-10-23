@@ -7205,11 +7205,18 @@ html {
   overflow: hidden;
 }
 
-.hero-scene canvas {
+.hero-scene canvas,
+.hero-scene .hero-video {
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: cover;
   will-change: opacity;
+}
+
+/* 视频还在加载时先垫一层暮色，避免白闪 */
+.hero-scene {
+  background: linear-gradient(#080f22 0%, #20325a 42%, #6b5f7e 68%, #c98a70 84%, #f0bd8e 100%);
 }
 
 .scene-hint {
@@ -7251,11 +7258,24 @@ html {
 }
 
 .scene-lede {
+  position: relative;
+  isolation: isolate;
   min-height: 88vh;
   padding-top: 13vh;
   opacity: calc(1 - var(--hero-p, 0) * 1.45);
   transform: translateY(calc(var(--hero-p, 0) * -60px));
   will-change: opacity, transform;
+}
+
+/* 文字压在亮水面上会糊：垫一层跟着标题一起淡出的暗角 */
+.scene-lede::before {
+  content: "";
+  position: absolute;
+  inset: -6vh -10vw -12vh -8vw;
+  z-index: -1;
+  background: radial-gradient(52% 62% at 30% 40%, rgba(4, 10, 20, 0.5), rgba(4, 10, 20, 0.22) 55%, rgba(4, 10, 20, 0) 80%);
+  filter: blur(26px);
+  pointer-events: none;
 }
 
 .scene-lede h1 {
@@ -7286,8 +7306,9 @@ html {
 }
 
 .scene-lede .hero-sub {
-  color: rgba(233, 244, 255, 0.8);
-  text-shadow: 0 2px 20px rgba(3, 12, 24, 0.5);
+  color: rgba(240, 247, 255, 0.92);
+  font-size: 15px;
+  text-shadow: 0 2px 24px rgba(3, 12, 24, 0.75);
 }
 
 .scene-lede .hero-sub b {

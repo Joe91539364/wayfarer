@@ -149,7 +149,7 @@ function readBody(req: IncomingMessage, limit = 1_000_000): Promise<string> {
   });
 }
 
-function serveFile(res: ServerResponse, base: string, pathname: string): boolean {
+function serveFile(res: ServerResponse, base: string, pathname: string, req?: IncomingMessage): boolean {
   const rel = normalize(pathname).replace(/^(\.\.[/\\])+/, '');
   const file = join(base, rel === '/' || rel === '\\' ? 'index.html' : rel);
   if (!file.startsWith(base)) return false;
@@ -164,9 +164,42 @@ function serveFile(res: ServerResponse, base: string, pathname: string): boolean
   }
   const body = readFileSync(file);
   const type = MIME[extname(file)] ?? 'application/octet-stream';
+
+  // Range 请求：视频要能拖进度（首屏的滚动擦洗全靠它）。
+  // 不支持 Range 时浏览器能播但 seekable 是 [0,0]，currentTime 写了也纹丝不动。
+  const range = req?.headers.range;
+  if (range) {
+    const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+    if (m) {
+      const size = body.length;
+      let start = m[1] ? Number(m[1]) : 0;
+      let end = m[2] ? Number(m[2]) : size - 1;
+      if (!m[1] && m[2]) {
+        // 后缀范围：最后 N 字节
+        start = Math.max(0, size - Number(m[2]));
+        end = size - 1;
+      }
+      if (Number.isFinite(start) && Number.isFinite(end) && start <= end && start < size) {
+        end = Math.min(end, size - 1);
+        res.writeHead(206, {
+          'Content-Type': type,
+          'Content-Length': String(end - start + 1),
+          'Content-Range': `bytes ${start}-${end}/${size}`,
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'no-store',
+        });
+        res.end(body.subarray(start, end + 1));
+        return true;
+      }
+    }
+    res.writeHead(416, { 'Content-Range': `bytes */${body.length}` });
+    res.end();
+    return true;
+  }
+
   // 图标等二进制直接回 Buffer；send 只收字符串，utf8 往返会把字节打碎
-  if (type.startsWith('image/') || type === 'font/woff2' || type === 'application/octet-stream') {
-    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
+  if (type.startsWith('image/') || type === 'font/woff2' || type === 'application/octet-stream' || type.startsWith('video/')) {
+    res.writeHead(200, { 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store', 'Content-Length': String(body.length) });
     res.end(body);
     return true;
   }
@@ -613,8 +646,8 @@ const server = createServer(async (req, res) => {
   }
 
   // 静态资源：先 dist，再 public
-  if (serveFile(res, DIST, url.pathname)) return;
-  if (serveFile(res, PUBLIC, url.pathname)) return;
+  if (serveFile(res, DIST, url.pathname, req)) return;
+  if (serveFile(res, PUBLIC, url.pathname, req)) return;
 
   // SPA 兜底
   const index = resolve(DIST, 'index.html');
