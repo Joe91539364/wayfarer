@@ -44,14 +44,6 @@ export default function HeroScene({ active }: { active: boolean }) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
-    // 只有真实的滚动动作（滚轮 / 触摸 / 键盘）才允许进入续播：
-    // 刷新后浏览器会把滚动位置恢复到上次的位置，那次 scroll 不是用户操作，
-    // 一开播就会从片尾「嗖」一下 —— 用户说的「启动时一闪而过」就是它
-    let userScrolled = false;
-    const markUser = () => {
-      userScrolled = true;
-    };
-
     const onScroll = () => {
       // 分母用真实可滚动高度：页面多高就潜多久，滚到底必然 p = 1
       const scrollable = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
@@ -59,110 +51,69 @@ export default function HeroScene({ active }: { active: boolean }) {
       target.current = clamp(window.scrollY / span, 0, 1);
     };
 
-    // 沉底后的「续播」只循环最后一小段水下镜头，不回到片头的天空 ——
-    // 否则整片 loop 会从片尾跳回 0 秒，看上去就是「一闪而过」
-    const TAIL_SECONDS = 1.6;
-    let holdSince = 0;
-
-    const paintVideo = (p: number, now: number) => {
+    /**
+     * 视频**只做滚动的画面**，任何情况下都不 play()。
+     *
+     * 之前沉底会自播、整片 loop，两次都被反馈「闪一下就没」—— 播放和滚动是
+     * 两根不同的时间轴，只要它自己动，就一定会和手指打架。现在：
+     * 滚动到哪一帧就是哪一帧，滚到底停在末帧（水下），
+     * 画面「活着」的感觉交给 CSS 的极慢推近，而不是播放。
+     */
+    const paintVideo = (p: number) => {
       if (!video) return;
       const duration = video.duration;
       if (!Number.isFinite(duration) || duration <= 0) {
         video.pause();
         return;
       }
-
-      if (p < 0.985) {
-        holdSince = 0;
-        video.loop = false;
-        if (!video.paused) video.pause();
-        const want = p * (duration - 0.05);
-        // 每帧都写 currentTime 会让解码器忙于 seek，差得不够多就不写
-        if (Math.abs(video.currentTime - want) > 0.02) {
-          try {
-            video.currentTime = want;
-          } catch {
-            /* 元数据还没到 */
-          }
+      if (!video.paused) video.pause();
+      const want = p >= 0.985 ? duration - 0.04 : p * (duration - 0.05);
+      // 每帧都写 currentTime 会让解码器忙于 seek，差得不够多就不写
+      if (Math.abs(video.currentTime - want) > 0.02) {
+        try {
+          video.currentTime = want;
+        } catch {
+          /* 元数据还没到 */
         }
-        return;
       }
-
-      if (!userScrolled) {
-        video.pause();
-        return;
-      }
-      if (!holdSince) holdSince = now;
-      if (now - holdSince < 240) {
-        video.pause();
-        return;
-      }
-      const tailStart = Math.max(0, duration - TAIL_SECONDS);
-      if (reduce) {
-        // 减少动效：停在尾巴的第一帧，不自己动
-        video.pause();
-        if (Math.abs(video.currentTime - tailStart) > 0.05) video.currentTime = tailStart;
-        return;
-      }
-      video.loop = false;
-      if (video.currentTime < tailStart || video.currentTime > duration - 0.06) {
-        video.currentTime = tailStart;
-      }
-      if (video.paused) void video.play().catch(() => undefined);
-    };
-
-    // 尾部循环：播到片尾就退回 tailStart，而不是 loop 到 0
-    const onTimeUpdate = () => {
-      if (!video) return;
-      const duration = video.duration;
-      if (!Number.isFinite(duration) || duration <= 0) return;
-      if (video.paused) return;
-      const tailStart = Math.max(0, duration - TAIL_SECONDS);
-      if (video.currentTime > duration - 0.12) video.currentTime = tailStart;
     };
 
     const loop = (now: number) => {
-      progress.current += (target.current - progress.current) * 0.12;
+      const step = (target.current - progress.current) * 0.12;
+      // 限速：一次滚轮/惯性跳很远时，画面最多前进 0.035/帧，看得见地「沉」下去
+      progress.current += Math.max(-0.05, Math.min(0.026, step));
       const p = progress.current;
       root.style.setProperty('--hero-p', p.toFixed(4));
       if (fallback) {
         if (ctx) drawScene(ctx, width, height, p, reduce ? 0 : now / 1000);
       } else {
-        paintVideo(p, now);
+        paintVideo(p);
       }
       raf = requestAnimationFrame(loop);
     };
 
     resize();
-    // 启动时先钉在第一帧：浏览器的滚动恢复会在稍后触发一次 scroll，
-    // 那次才算「真的滚过」，也只有那时才允许进入续播
-    target.current = 0;
-    progress.current = 0;
+    // 启动时**直接对到当前滚动位置**（刷新会恢复滚动）：
+    // 从 0 追过去会让整段下潜在半秒内放完，看起来就是「闪一下」
+    onScroll();
+    progress.current = target.current;
     if (video) {
       video.pause();
       if (video.readyState >= 1) video.currentTime = 0;
       else video.addEventListener('loadedmetadata', () => {
         video.currentTime = 0;
       }, { once: true });
-      video.addEventListener('timeupdate', onTimeUpdate);
     }
     raf = requestAnimationFrame(loop);
     window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('wheel', markUser, { passive: true });
-    window.addEventListener('touchmove', markUser, { passive: true });
-    window.addEventListener('keydown', markUser);
     window.addEventListener('resize', resize);
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('wheel', markUser);
-      window.removeEventListener('touchmove', markUser);
-      window.removeEventListener('keydown', markUser);
       window.removeEventListener('resize', resize);
       root.style.removeProperty('--hero-p');
       if (video) {
-        video.removeEventListener('timeupdate', onTimeUpdate);
         if (!video.paused) video.pause();
       }
     };

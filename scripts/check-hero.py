@@ -42,9 +42,10 @@ def p_value():
 
 
 def scroll_to(ratio):
-    # 先派一个滚轮事件：真实用户是靠手势滚的，代码里也只认手势
-    drv.execute_script("window.dispatchEvent(new WheelEvent('wheel', {deltaY: 120, bubbles: true}))")
-    drv.execute_script("window.scrollTo({top: innerHeight * 1.15 * arguments[0], behavior:'instant'})", ratio)
+    drv.execute_script(
+        "window.scrollTo({top: (document.documentElement.scrollHeight - innerHeight) * arguments[0], behavior:'instant'})",
+        ratio,
+    )
     time.sleep(1.2)
 
 
@@ -106,21 +107,22 @@ try:
         check("减少动效：沉底后停在末帧", paused and p2 > 0.95, f"paused={paused}")
     else:
         t_a = float(drv.execute_script("return arguments[0].currentTime", video))
-        check("沉底后开始续播", (not paused) or t_a > dur - 2.0, f"paused={paused} t={t_a:.2f}")
-        # 只循环最后一小段：不许跳回片头（那才会「一闪而过」）
-        check("续播只在水下尾部循环", t_a > dur * 0.6, f"t={t_a:.2f} / {dur:.2f}")
+        # 视频绝不自己播：它是滚动的画面，不是播放器
+        check("沉底后视频不自动播放", paused, f"paused={paused} t={t_a:.2f}")
+        check("沉底停在末帧（水下）", t_a > dur * 0.9, f"t={t_a:.2f} / {dur:.2f}")
     drv.get_screenshot_as_file(os.path.join(OUT, "hero-3-underwater.png"))
 
-    # 刷新在底部：浏览器会恢复滚动位置，但绝不能一开播就「嗖」过去
+    # 刷新在底部：直接对到当前滚动位置的帧，既不从 0 追、也不自己播
     drv.refresh()
-    time.sleep(3.0)
+    time.sleep(2.6)
     v2 = drv.find_elements("css selector", ".hero-video")
     if v2:
         samples = []
         for _ in range(4):
             samples.append(drv.execute_script("const v=document.querySelector('.hero-video'); return {ct:+v.currentTime.toFixed(2), paused:v.paused}", ))
             time.sleep(0.35)
-        check("刷新后从头开始（不闪）", all(s_["ct"] < 0.3 for s_ in samples), str(samples))
+        cts = [s_["ct"] for s_ in samples]
+        check("刷新后不对着镜头跑（帧已定住）", max(cts) - min(cts) < 0.12, str(cts))
         check("刷新后没有自动播放", all(s_["paused"] for s_ in samples), str(samples))
     else:
         check("刷新后仍有视频", False)

@@ -7211,7 +7211,14 @@ html {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  will-change: opacity;
+  will-change: transform;
+}
+
+/* 画面不自己播，靠极慢的推近给出「还在动」的感觉 */
+.hero-scene .hero-video {
+  transform: scale(calc(1 + var(--hero-p, 0) * 0.045));
+  transform-origin: 50% 58%;
+  transition: transform 0.12s linear;
 }
 
 /* 视频还在加载时先垫一层暮色，避免白闪 */
@@ -7326,7 +7333,7 @@ html {
 }
 
 .scene-beat {
-  min-height: 46vh;
+  min-height: 96vh;
   display: flex;
   align-items: center;
   justify-content: center;
